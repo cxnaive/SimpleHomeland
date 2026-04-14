@@ -1,0 +1,48 @@
+name: SimpleHomeland
+version: ${version}
+main: dev.user.homeland.SimpleHomelandPlugin
+api-version: '1.21'
+folia-supported: true
+
+libraries:
+  - com.zaxxer:HikariCP:6.2.1
+  - com.h2database:h2:2.3.232
+  - com.mysql:mysql-connector-j:9.2.0
+  - com.google.code.gson:gson:2.12.1
+
+depend: [PlaceholderAPI, Worlds]
+softdepend: [XConomy, PlayerPoints]
+
+commands:
+  homeland:
+    description: 家园管理命令
+    permission: simplehomeland.use
+    aliases: [hl]
+
+permissions:
+  simplehomeland.use:
+    default: op
+    description: 使用基础命令
+  simplehomeland.homeland.create:
+    default: op
+    description: 创建家园
+  simplehomeland.homeland.delete:
+    default: op
+    description: 删除家园
+  simplehomeland.homeland.home:
+    default: op
+    description: 传送到家园
+  simplehomeland.homeland.list:
+    default: op
+    description: 查看家园列表
+  simplehomeland.homeland.border:
+    default: op
+    description: 扩展边界
+  simplehomeland.homeland.unlock:
+    default: op
+    description: 解锁地狱/末地
+  simplehomeland.admin:
+    default: op
+    description: 管理员权限
+    children:
+      simplehomeland.reload: true

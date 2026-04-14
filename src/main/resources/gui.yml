@@ -1,0 +1,205 @@
+# ==================== 全局设置 ====================
+global:
+  # 边框材质
+  border-material: BLACK_STAINED_GLASS_PANE
+  # 关闭按钮材质
+  close-material: BARRIER
+  # 返回按钮材质
+  back-material: ARROW
+  # 翻页按钮材质
+  page-button-material: ARROW
+  # 页码信息材质
+  page-info-material: PAPER
+
+# ==================== 家园列表 GUI ====================
+homeland-list:
+  size: 54
+  # 每页显示数量
+  items-per-page: 4
+  # 每个列表项的槽位
+  page-slots: [10, 19, 28, 37]
+  # 翻页按钮
+  page-prev-slot: 46
+  page-next-slot: 53
+  # 家园物品材质
+  homeland-material: GRASS_BLOCK
+  # 空列表提示
+  empty-slot: 22
+  empty-material: BARRIER
+  # 创建家园按钮
+  create-slot: 48
+  create-material: NETHER_STAR
+  # 返回主世界按钮
+  return-to-main-slot: 4
+  return-to-main-material: BEACON
+  # 关闭按钮
+  close-slot: 49
+  # 在线玩家按钮
+  online-players-slot: 50
+  online-players-material: PLAYER_HEAD
+
+# ==================== 家园管理 GUI ====================
+manage:
+  size: 54
+  # 家园信息
+  info-slot: 13
+  info-material: knowledge_book
+  # 传送
+  teleport-slot: 20
+  teleport-material: ENDER_PEARL
+  # 游戏规则
+  gamerule-slot: 21
+  gamerule-material: command_block
+  # 返回主世界
+  return-to-main-slot: 31
+  return-to-main-material: BEACON
+  # 地狱（三种状态共用一个槽位）
+  nether-slot: 24
+  nether-unlock-material: NETHERRACK
+  nether-lock-material: RED_STAINED_GLASS_PANE
+  nether-confirm-material: ORANGE_STAINED_GLASS_PANE
+  # 末地（三种状态共用一个槽位）
+  end-slot: 23
+  end-unlock-material: END_STONE
+  end-lock-material: RED_STAINED_GLASS_PANE
+  end-confirm-material: ORANGE_STAINED_GLASS_PANE
+  # 公开/私有切换
+  public-slot: 32
+  public-material: white_banner
+  private-material: black_banner
+  # 邀请管理
+  invite-slot: 29
+  invite-material: PLAYER_HEAD
+  # 扩展边界
+  expand-slot: 30
+  expand-material: cherry_fence
+  expand-confirm-material: LIME_STAINED_GLASS_PANE
+  # 删除家园
+  delete-slot: 43
+  delete-material: TNT
+  delete-confirm-material: RED_STAINED_GLASS_PANE
+  # 访客权限按钮
+  visitor-flag-slot: 22
+  visitor-flag-material: OAK_SIGN
+  # 导航
+  back-slot: 45
+  close-slot: 53
+
+# ==================== 创建家园地形选择 GUI ====================
+create:
+  size: 27
+  default-slot: 11
+  default-material: GRASS_BLOCK
+  void-slot: 13
+  void-material: LIGHT_BLUE_STAINED_GLASS
+  flat-slot: 15
+  flat-material: SAND
+  close-slot: 22
+
+# ==================== 游戏规则 GUI ====================
+gamerule:
+  size: 54
+  items-per-page: 28
+  content-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+  empty-slot: 22
+  back-slot: 45
+  prev-slot: 47
+  page-info-slot: 49
+  next-slot: 51
+  close-slot: 53
+
+# ==================== 管理员 GUI ====================
+admin:
+  size: 54
+  items-per-page: 4
+  page-slots: [10, 19, 28, 37]
+  page-prev-slot: 45
+  page-next-slot: 53
+  # 提示信息
+  info-slot: 4
+  info-material: COMPASS
+  # 玩家头颅
+  player-material: PLAYER_HEAD
+  # 空列表提示
+  empty-slot: 22
+  empty-material: BARRIER
+  close-slot: 49
+  # 大厅访客权限
+  lobby-flag-slot: 48
+  lobby-flag-material: OAK_SIGN
+
+  # 管理员 - 玩家家园列表
+  player-homelands:
+    size: 54
+    items-per-page: 4
+    page-slots: [10, 19, 28, 37]
+    page-prev-slot: 46
+    page-next-slot: 53
+    homeland-material: GRASS_BLOCK
+    empty-slot: 22
+    empty-material: BARRIER
+    create-slot: 48
+    create-material: NETHER_STAR
+    back-slot: 45
+    close-slot: 49
+
+# ==================== 访问在线玩家 GUI ====================
+visitor:
+  size: 54
+  items-per-page: 4
+  page-slots: [10, 19, 28, 37]
+  page-prev-slot: 46
+  page-next-slot: 53
+  # 提示信息
+  info-slot: 4
+  info-material: COMPASS
+  # 玩家头颅
+  player-material: PLAYER_HEAD
+  # 空列表提示
+  empty-slot: 22
+  empty-material: BARRIER
+  # 导航
+  back-slot: 45
+  close-slot: 49
+
+  # 访问 - 玩家家园列表
+  player-homelands:
+    size: 54
+    items-per-page: 4
+    page-slots: [10, 19, 28, 37]
+    page-prev-slot: 46
+    page-next-slot: 53
+    homeland-accessible-material: LIME_STAINED_GLASS_PANE
+    homeland-denied-material: RED_STAINED_GLASS_PANE
+    empty-slot: 22
+    empty-material: BARRIER
+    back-slot: 45
+    close-slot: 49
+
+# ==================== 访客权限设置 GUI ====================
+visitor-flag:
+  size: 54
+  items-per-page: 28
+  content-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+  empty-slot: 22
+  prev-slot: 47
+  page-info-slot: 49
+  next-slot: 51
+  back-slot: 45
+  close-slot: 53
+
+# ==================== 邀请管理 GUI ====================
+invite-manage:
+  size: 54
+  items-per-page: 28
+  content-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+  mode-slot: 4
+  mode-online-material: LIME_STAINED_GLASS_PANE
+  mode-invited-material: ORANGE_STAINED_GLASS_PANE
+  empty-slot: 22
+  empty-material: BARRIER
+  prev-slot: 47
+  page-info-slot: 49
+  next-slot: 51
+  back-slot: 45
+  close-slot: 53

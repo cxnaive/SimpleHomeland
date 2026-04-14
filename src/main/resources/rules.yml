@@ -1,0 +1,308 @@
+# 游戏规则配置（key 为 GameRules 类字段名）
+# enabled: 是否在 GUI 中显示 / default-value: 创建家园时的初始值
+gamerules:
+  # ---- 生存相关 ----
+  KEEP_INVENTORY:
+    enabled: false
+    material: GOLDEN_APPLE
+    name: "&6保留物品栏"
+    lore:
+      - "&7死亡时保留物品栏中的物品"
+    default-value: true
+  NATURAL_HEALTH_REGENERATION:
+    enabled: false
+    material: GOLDEN_CARROT
+    name: "&6自然回血"
+    lore:
+      - "&7控制玩家饥饿值足够时是否自然恢复生命"
+    default-value: true
+  IMMEDIATE_RESPAWN:
+    enabled: false
+    material: TOTEM_OF_UNDYING
+    name: "&6立即重生"
+    lore:
+      - "&7死亡后立即重生，不显示死亡画面"
+    default-value: false
+  SHOW_DEATH_MESSAGES:
+    enabled: false
+    material: WITHER_SKELETON_SKULL
+    name: "&6死亡消息"
+    lore:
+      - "&7玩家死亡时是否显示死亡消息"
+    default-value: true
+  # ---- 伤害相关 ----
+  DROWNING_DAMAGE:
+    enabled: false
+    material: HEART_OF_THE_SEA
+    name: "&6溺水伤害"
+    lore:
+      - "&7控制玩家是否会受到溺水伤害"
+    default-value: true
+  FALL_DAMAGE:
+    enabled: false
+    material: FEATHER
+    name: "&6摔落伤害"
+    lore:
+      - "&7控制玩家是否会受到摔落伤害"
+    default-value: true
+  FIRE_DAMAGE:
+    enabled: false
+    material: CAMPFIRE
+    name: "&6火焰伤害"
+    lore:
+      - "&7控制玩家和实体是否会受到火焰伤害"
+    default-value: true
+  FREEZE_DAMAGE:
+    enabled: false
+    material: POWDER_SNOW_BUCKET
+    name: "&6冰冻伤害"
+    lore:
+      - "&7控制玩家在细雪中是否会受到冰冻伤害"
+    default-value: true
+  # ---- 生物相关 ----
+  SPAWN_MOBS:
+    enabled: true
+    material: ZOMBIE_SPAWN_EGG
+    name: "&6生物生成"
+    lore:
+      - "&7控制是否自然生成动物和怪物"
+    default-value: true
+  SPAWN_MONSTERS:
+    enabled: true
+    material: SKELETON_SPAWN_EGG
+    name: "&6怪物生成"
+    lore:
+      - "&7控制是否自然生成敌对怪物"
+    default-value: true
+  SPAWN_PHANTOMS:
+    enabled: true
+    material: PHANTOM_MEMBRANE
+    name: "&6幻翼生成"
+    lore:
+      - "&7控制长时间不睡觉是否生成幻翼"
+    default-value: true
+  SPAWN_PATROLS:
+    enabled: true
+    material: CROSSBOW
+    name: "&6掠夺者巡逻"
+    lore:
+      - "&7控制是否会生成掠夺者巡逻队"
+    default-value: true
+  SPAWN_WARDENS:
+    enabled: true
+    material: SCULK_SHRIEKER
+    name: "&6监守者生成"
+    lore:
+      - "&7控制幽匿尖啸体是否生成监守者"
+    default-value: true
+  SPAWN_WANDERING_TRADERS:
+    enabled: true
+    material: WANDERING_TRADER_SPAWN_EGG
+    name: "&6流浪商人"
+    lore:
+      - "&7控制是否会生成流浪商人"
+    default-value: true
+  SPAWNER_BLOCKS_WORK:
+    enabled: true
+    material: SPAWNER
+    name: "&6刷怪笼工作"
+    lore:
+      - "&7控制刷怪笼是否生成生物"
+    default-value: true
+  MOB_GRIEFING:
+    enabled: true
+    material: ITEM_FRAME
+    name: "&6怪物破坏方块"
+    lore:
+      - "&7控制苦力怕/末影人等是否破坏方块"
+    default-value: true
+  MOB_DROPS:
+    enabled: false
+    material: ROTTEN_FLESH
+    name: "&6生物掉落物"
+    lore:
+      - "&7控制生物死亡时是否掉落物品"
+    default-value: true
+  FORGIVE_DEAD_PLAYERS:
+    enabled: false
+    material: GOLDEN_HELMET
+    name: "&6原谅死亡玩家"
+    lore:
+      - "&7被激怒的中立生物在目标玩家死亡后是否原谅"
+    default-value: true
+  UNIVERSAL_ANGER:
+    enabled: false
+    material: BLAZE_ROD
+    name: "&6通用愤怒"
+    lore:
+      - "&7中立生物被激怒时是否对全体玩家愤怒"
+    default-value: false
+  RAIDS:
+    enabled: false
+    material: TOTEM_OF_UNDYING
+    name: "&6袭击事件"
+    lore:
+      - "&7控制是否触发袭击事件"
+    default-value: true
+  # ---- 方块/物品掉落 ----
+  BLOCK_DROPS:
+    enabled: false
+    material: DIAMOND_PICKAXE
+    name: "&6方块掉落"
+    lore:
+      - "&7破坏方块时是否掉落物品"
+    default-value: true
+  ENTITY_DROPS:
+    enabled: false
+    material: CHEST
+    name: "&6实体掉落"
+    lore:
+      - "&7控制实体是否产生掉落物"
+    default-value: true
+  TNT_EXPLODES:
+    enabled: true
+    material: TNT
+    name: "&6TNT爆炸"
+    lore:
+      - "&7控制TNT是否可以爆炸"
+    default-value: true
+  TNT_EXPLOSION_DROP_DECAY:
+    enabled: false
+    material: GUNPOWDER
+    name: "&6TNT爆炸掉落衰减"
+    lore:
+      - "&7TNT爆炸时方块掉落物是否减少"
+    default-value: false
+  BLOCK_EXPLOSION_DROP_DECAY:
+    enabled: false
+    material: FIRE_CHARGE
+    name: "&6方块爆炸掉落衰减"
+    lore:
+      - "&7方块爆炸时掉落物是否减少"
+    default-value: true
+  MOB_EXPLOSION_DROP_DECAY:
+    enabled: false
+    material: FIREWORK_STAR
+    name: "&6生物爆炸掉落衰减"
+    lore:
+      - "&7苦力怕等生物爆炸时掉落物是否减少"
+    default-value: true
+  PROJECTILES_CAN_BREAK_BLOCKS:
+    enabled: false
+    material: BOW
+    name: "&6弹射物破坏方块"
+    lore:
+      - "&7控制弹射物是否可以破坏方块"
+    default-value: true
+  # ---- 世界/环境 ----
+  ADVANCE_TIME:
+    enabled: true
+    material: CLOCK
+    name: "&6昼夜交替"
+    lore:
+      - "&7控制是否有昼夜循环"
+    default-value: true
+  ADVANCE_WEATHER:
+    enabled: true
+    material: WATER_BUCKET
+    name: "&6天气变化"
+    lore:
+      - "&7控制天气是否自然变化"
+    default-value: true
+  FIRE_SPREAD_RADIUS_AROUND_PLAYER:
+    enabled: true
+    material: FLINT_AND_STEEL
+    name: "&6火焰蔓延范围"
+    lore:
+      - "&7火焰在玩家附近的蔓延范围（方块）"
+      - "&7默认值128，设为0禁止火焰蔓延"
+    default-value: "128"
+  SPREAD_VINES:
+    enabled: false
+    material: VINE
+    name: "&6藤蔓蔓延"
+    lore:
+      - "&7控制藤蔓是否自然蔓延生长"
+    default-value: true
+  WATER_SOURCE_CONVERSION:
+    enabled: false
+    material: WATER_BUCKET
+    name: "&6水源形成"
+    lore:
+      - "&7控制两个水流相邻时是否形成新的水源"
+    default-value: true
+  LAVA_SOURCE_CONVERSION:
+    enabled: false
+    material: LAVA_BUCKET
+    name: "&6岩浆源形成"
+    lore:
+      - "&7控制岩浆是否可以形成新的岩浆源"
+    default-value: false
+  RANDOM_TICK_SPEED:
+    enabled: false
+    material: HOPPER
+    name: "&6随机刻速度"
+    lore:
+      - "&7控制作物生长、树叶掉落等随机事件速度"
+      - "&7默认值3，设为0禁止所有随机刻"
+    default-value: "3"
+  # ---- 玩家互动 ----
+  PVP:
+    enabled: true
+    material: IRON_SWORD
+    name: "&6PVP"
+    lore:
+      - "&7允许玩家互相攻击"
+    default-value: true
+  ALLOW_ENTERING_NETHER_USING_PORTALS:
+    enabled: false
+    material: OBSIDIAN
+    name: "&6允许下界传送门"
+    lore:
+      - "&7控制是否可以通过传送门进入下界"
+      - "&7仅当地狱维度已解锁时有效"
+    default-value: true
+  ENDER_PEARLS_VANISH_ON_DEATH:
+    enabled: false
+    material: ENDER_PEARL
+    name: "&6末影珍珠死亡消失"
+    lore:
+      - "&7玩家死亡时已投掷的末影珍珠是否消失"
+    default-value: true
+  PLAYERS_SLEEPING_PERCENTAGE:
+    enabled: true
+    material: WHITE_BED
+    name: "&6跳过夜晚比例"
+    lore:
+      - "&7需要多少比例的玩家睡觉才能跳过夜晚"
+      - "&7范围0-100，设为0只需1人"
+    default-value: "100"
+  RESPAWN_RADIUS:
+    enabled: false
+    material: COMPASS
+    name: "&6重生半径"
+    lore:
+      - "&7玩家在世界重生点附近的重生范围（方块）"
+    default-value: "10"
+  MAX_ENTITY_CRAMMING:
+    enabled: false
+    material: MINECART
+    name: "&6实体拥挤上限"
+    lore:
+      - "&7单个方块内超过此数量的实体将受到挤压伤害"
+    default-value: "24"
+  GLOBAL_SOUND_EVENTS:
+    enabled: false
+    material: JUKEBOX
+    name: "&6全局音效"
+    lore:
+      - "&7控制某些事件是否播放全局音效"
+      - "&7如凋灵/末影龙死亡、村落铃铛等"
+    default-value: true
+  SHOW_ADVANCEMENT_MESSAGES:
+    enabled: false
+    material: DIAMOND
+    name: "&6播报进度"
+    lore:
+      - "&7获得进度时是否全服播报"
+    default-value: true

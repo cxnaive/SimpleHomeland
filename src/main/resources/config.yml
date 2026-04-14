@@ -1,0 +1,59 @@
+database:
+  type: h2
+  h2:
+    file: homeland
+  mysql:
+    host: localhost
+    port: 3306
+    database: homeland
+    user: root
+    password: ""
+    pool-size: 5
+
+homeland:
+  max-homelands: 1
+  default-border-radius: 500
+  max-border-radius: 5000
+  border-expand-step: 100
+  nether-unlock:
+    money: 500.0
+    points: 0
+  end-unlock:
+    money: 1000.0
+    points: 0
+  creation:
+    money: 1000.0
+    points: 0
+  expansion:
+    money: 100.0
+    points: 0
+  world:
+    # 种子（空=随机，非空则所有家园共享相同地形）
+    seed: ""
+    structures: true
+    bonus-chest: false
+  # 默认地形类型（default=默认地形, void=空岛, flat=超平坦）
+  world-type: default
+  # 世界无玩家后自动卸载时间（秒），0 = 不自动卸载
+  auto-unload-seconds: 600
+  # 服务器启动时预加载所有家园世界（确保外部插件传送兼容）
+  # 启用后所有家园世界常驻内存，auto-unload-seconds 无效
+  preload-worlds: false
+
+# 命令拦截
+command-block:
+  enabled: false
+  # 被拦截的命令列表（不区分大小写，匹配命令前缀）
+  blocked-commands:
+    - "tp"
+    - "tpa"
+    - "tpaccept"
+    - "home"
+    - "spawn"
+    - "warp"
+    - "back"
+  # 家园主人是否也受限制
+  block-owner: false
+
+# 大厅访客权限（JSON 格式，留空使用默认值）
+lobby-visitor-flags: ""
