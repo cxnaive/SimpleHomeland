@@ -25,6 +25,8 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     private static final String PERM_LIST = "simplehomeland.homeland.list";
     private static final String PERM_BORDER = "simplehomeland.homeland.border";
     private static final String PERM_UNLOCK = "simplehomeland.homeland.unlock";
+    private static final String PERM_UNLOCK_NETHER = "simplehomeland.homeland.unlock.nether";
+    private static final String PERM_UNLOCK_END = "simplehomeland.homeland.unlock.end";
     private static final String PERM_ADMIN = "simplehomeland.admin";
 
     private static final List<String> SUB_COMMANDS = List.of(
@@ -260,8 +262,20 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         String dimension = args[2].toLowerCase();
 
         switch (dimension) {
-            case "nether" -> plugin.getHomelandManager().unlockNether(player, name, () -> {}, () -> {});
-            case "end" -> plugin.getHomelandManager().unlockEnd(player, name, () -> {}, () -> {});
+            case "nether" -> {
+                if (!player.hasPermission(PERM_UNLOCK_NETHER)) {
+                    sendMessage(sender, plugin.getConfigManager().getMessage("no-permission"));
+                    return true;
+                }
+                plugin.getHomelandManager().unlockNether(player, name, () -> {}, () -> {});
+            }
+            case "end" -> {
+                if (!player.hasPermission(PERM_UNLOCK_END)) {
+                    sendMessage(sender, plugin.getConfigManager().getMessage("no-permission"));
+                    return true;
+                }
+                plugin.getHomelandManager().unlockEnd(player, name, () -> {}, () -> {});
+            }
             default -> sendMessage(sender, plugin.getConfigManager().getMessage("usage.unlock"));
         }
         return true;
@@ -289,8 +303,20 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         String dimension = args[2].toLowerCase();
 
         switch (dimension) {
-            case "nether" -> plugin.getHomelandManager().lockNether(player, name, () -> {}, () -> {});
-            case "end" -> plugin.getHomelandManager().lockEnd(player, name, () -> {}, () -> {});
+            case "nether" -> {
+                if (!player.hasPermission(PERM_UNLOCK_NETHER)) {
+                    sendMessage(sender, plugin.getConfigManager().getMessage("no-permission"));
+                    return true;
+                }
+                plugin.getHomelandManager().lockNether(player, name, () -> {}, () -> {});
+            }
+            case "end" -> {
+                if (!player.hasPermission(PERM_UNLOCK_END)) {
+                    sendMessage(sender, plugin.getConfigManager().getMessage("no-permission"));
+                    return true;
+                }
+                plugin.getHomelandManager().lockEnd(player, name, () -> {}, () -> {});
+            }
             default -> sendMessage(sender, plugin.getConfigManager().getMessage("usage.lock"));
         }
         return true;

@@ -82,8 +82,8 @@ public class HomelandManageGUI extends AbstractGUI {
         setItem(cfg.getInfoSlot(), createInfoItem(homeland));
 
         // 地狱
-        boolean canUnlock = isAdmin || player.hasPermission("simplehomeland.homeland.unlock");
-        if (canUnlock) {
+        boolean canUnlockNether = isAdmin || player.hasPermission("simplehomeland.homeland.unlock.nether");
+        if (canUnlockNether) {
             if (!homeland.hasNether()) {
                 if (isAdmin) {
                     setItem(cfg.getNetherSlot(), createUnlockAdminItem(config, "gui.unlock-nether-item-name"), (p, e) -> {
@@ -154,7 +154,8 @@ public class HomelandManageGUI extends AbstractGUI {
         });
 
         // 末地
-        if (canUnlock) {
+        boolean canUnlockEnd = isAdmin || player.hasPermission("simplehomeland.homeland.unlock.end");
+        if (canUnlockEnd) {
             if (!homeland.hasEnd()) {
                 if (isAdmin) {
                     setItem(cfg.getEndSlot(), createUnlockAdminItem(config, "gui.unlock-end-item-name"), (p, e) -> {

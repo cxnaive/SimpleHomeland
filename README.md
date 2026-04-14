@@ -77,7 +77,9 @@
 | `simplehomeland.homeland.home` | OP | 传送到家园 |
 | `simplehomeland.homeland.list` | OP | 查看列表 |
 | `simplehomeland.homeland.border` | OP | 扩展边界 |
-| `simplehomeland.homeland.unlock` | OP | 解锁维度 |
+| `simplehomeland.homeland.unlock` | OP | 解锁维度（含地狱+末地） |
+| `simplehomeland.homeland.unlock.nether` | OP | 解锁/删除地狱 |
+| `simplehomeland.homeland.unlock.end` | OP | 解锁/删除末地 |
 | `simplehomeland.admin` | OP | 管理员权限 |
 | `simplehomeland.reload` | OP（继承） | 重载配置 |
 
@@ -197,7 +199,7 @@ SimpleHomelandAPI.teleportToHomelandByWorldKey(player, worldKey, false, loc, res
 ./gradlew shadowJar
 ```
 
-输出：`build/libs/SimpleHomeland-1.1.0.jar`
+输出：`build/libs/SimpleHomeland-1.1.5.jar`
 
 ## 许可
 

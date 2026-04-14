@@ -40,7 +40,16 @@ permissions:
     description: 扩展边界
   simplehomeland.homeland.unlock:
     default: op
-    description: 解锁地狱/末地
+    description: 解锁维度（地狱+末地）
+    children:
+      simplehomeland.homeland.unlock.nether: true
+      simplehomeland.homeland.unlock.end: true
+  simplehomeland.homeland.unlock.nether:
+    default: op
+    description: 解锁地狱
+  simplehomeland.homeland.unlock.end:
+    default: op
+    description: 解锁末地
   simplehomeland.admin:
     default: op
     description: 管理员权限
