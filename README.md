@@ -1,5 +1,7 @@
 # SimpleHomeland
 
+[![](https://jitpack.io/v/cxnaive/SimpleHomeland.svg)](https://jitpack.io/#cxnaive/SimpleHomeland)
+
 一个基于 Paper/Folia 的 Minecraft 家园插件，为每位玩家提供独立的世界实例，支持维度解锁、访客权限、经济系统和管理员管理。
 
 ## 特性
@@ -162,7 +164,43 @@ lobby-visitor-flags: ""
 
 ## 对外 API
 
-其他插件可通过 `SimpleHomelandAPI` 传送玩家到家园世界：
+### 引入依赖
+
+**Gradle Kotlin DSL：**
+
+```kotlin
+repositories {
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    compileOnly("com.github.cxnaive:SimpleHomeland:v1.1.5")
+}
+```
+
+**Maven：**
+
+```xml
+<repository>
+    <id>jitpack.io</id>
+    <url>https://jitpack.io</url>
+</repository>
+
+<dependency>
+    <groupId>com.github.cxnaive</groupId>
+    <artifactId>SimpleHomeland</artifactId>
+    <version>v1.1.5</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+**plugin.yml：**
+
+```yaml
+softdepend: [SimpleHomeland]
+```
+
+### 调用示例
 
 ```java
 import dev.user.homeland.api.SimpleHomelandAPI;
