@@ -769,6 +769,7 @@ public class HomelandManager {
         } else {
             loadHomelandWorldAsync(targetWorldKey, homeland, loadedWorld -> {
                 if (loadedWorld == null) {
+                    apiBypass.remove(player.getUniqueId());
                     callback.accept(TeleportResult.WORLD_LOAD_FAILED);
                     return;
                 }
@@ -783,7 +784,9 @@ public class HomelandManager {
      */
     private void doTeleportWithResult(Player player, World world, @org.jetbrains.annotations.Nullable Location location,
                                       Consumer<TeleportResult> callback, TeleportResult successResult) {
-        Location target = location != null ? location : world.getSpawnLocation();
+        Location target = location != null
+                ? new Location(world, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch())
+                : world.getSpawnLocation();
         player.getScheduler().execute(plugin, () -> {
             player.teleportAsync(target).thenAccept(success -> {
                 apiBypass.remove(player.getUniqueId());
