@@ -43,6 +43,7 @@ public class HomelandManager {
     private final SimpleHomelandPlugin plugin;
     private final ConcurrentHashMap<UUID, List<Homeland>> homelandCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Homeland> worldKeyIndex = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<java.util.UUID, Homeland> worldUuidIndex = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Set<Integer>> playerInvites = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Boolean> creatingInProgress = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Boolean> namingInProgress = new ConcurrentHashMap<>();
@@ -360,24 +361,26 @@ public class HomelandManager {
                         applyDefaultGamerules(overworld);
 
                         // 写入数据库
+                        java.util.UUID worldUuid = overworld.getUID();
                         plugin.getDatabaseQueue().submit("create-homeland", conn -> {
                             try (PreparedStatement stmt = conn.prepareStatement(
-                                    "INSERT INTO homeland (owner_uuid, name, world_key, border_radius, has_nether, has_end, is_public, visitor_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                    "INSERT INTO homeland (owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                     PreparedStatement.RETURN_GENERATED_KEYS)) {
                                 stmt.setString(1, ownerUuid.toString());
                                 stmt.setString(2, name);
                                 stmt.setString(3, worldKey);
-                                stmt.setInt(4, borderRadius);
-                                stmt.setBoolean(5, false);
+                                stmt.setString(4, worldUuid.toString());
+                                stmt.setInt(5, borderRadius);
                                 stmt.setBoolean(6, false);
                                 stmt.setBoolean(7, false);
-                                stmt.setString(8, new VisitorFlags().toJson());
+                                stmt.setBoolean(8, false);
+                                stmt.setString(9, new VisitorFlags().toJson());
                                 stmt.executeUpdate();
 
                                 try (ResultSet rs = stmt.getGeneratedKeys()) {
                                     if (rs.next()) {
                                         int id = rs.getInt(1);
-                                        Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, borderRadius, false, false, false, new VisitorFlags());
+                                        Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, worldUuid, borderRadius, false, false, false, new VisitorFlags());
                                         homelandCache.computeIfAbsent(ownerUuid, k -> new CopyOnWriteArrayList<>()).add(homeland);
                                         indexHomeland(homeland);
                                     }
@@ -677,6 +680,10 @@ public class HomelandManager {
                 provider.levelView().setEnabled(world, true);
                 world.setAutoSave(true);
                 touchLastPlayerTime(targetWorldKey);
+                // 懒迁移：填充缺失的 world_uuid
+                if (homeland.getWorldUuid() == null) {
+                    updateWorldUuid(homeland, world.getUID());
+                }
                 callback.accept(world);
             });
         }).exceptionally(throwable -> {
@@ -715,6 +722,36 @@ public class HomelandManager {
 
             teleportToHomelandInternal(player, optHomeland.get(), optHomeland.get().getWorldKey(), bypassAccessCheck, location, callback);
         });
+    }
+
+    /**
+     * API 入口：按世界 UUID 传送。
+     * 先查 worldUuidIndex（支持未加载世界），再 fallback Bukkit.getWorld。
+     */
+    public void teleportToHomelandByWorldUUIDAPI(Player player, UUID worldUUID,
+                                                   boolean bypassAccessCheck, Consumer<TeleportResult> callback) {
+        teleportToHomelandByWorldUUIDAPI(player, worldUUID, bypassAccessCheck, null, callback);
+    }
+
+    /**
+     * API 入口：按世界 UUID 传送，可指定目标位置。
+     */
+    public void teleportToHomelandByWorldUUIDAPI(Player player, UUID worldUUID,
+                                                   boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
+                                                   Consumer<TeleportResult> callback) {
+        Homeland homeland = worldUuidIndex.get(worldUUID);
+        if (homeland != null) {
+            teleportToHomelandInternal(player, homeland, homeland.getWorldKey(), bypassAccessCheck, location, callback);
+            return;
+        }
+
+        // 非家园世界，尝试按 Bukkit UUID 查找
+        World bukkitWorld = Bukkit.getWorld(worldUUID);
+        if (bukkitWorld != null) {
+            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+        } else {
+            callback.accept(TeleportResult.WORLD_NOT_FOUND);
+        }
     }
 
     /**
@@ -1379,14 +1416,17 @@ public class HomelandManager {
         plugin.getDatabaseQueue().submit("load-world-key-index", conn -> {
             java.util.Map<String, Homeland> index = new java.util.HashMap<>();
             try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT id, owner_uuid, name, world_key, border_radius, has_nether, has_end, is_public, visitor_flags FROM homeland");
+                    "SELECT id, owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags FROM homeland");
                  ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
+                    String worldUuidStr = rs.getString("world_uuid");
+                    UUID worldUuid = (worldUuidStr != null && !worldUuidStr.isEmpty()) ? UUID.fromString(worldUuidStr) : null;
                     Homeland h = new Homeland(
                             rs.getInt("id"),
                             UUID.fromString(rs.getString("owner_uuid")),
                             rs.getString("name"),
                             rs.getString("world_key"),
+                            worldUuid,
                             rs.getInt("border_radius"),
                             rs.getBoolean("has_nether"),
                             rs.getBoolean("has_end"),
@@ -1428,6 +1468,10 @@ public class HomelandManager {
                     world.getWorldBorder().setCenter(0, 0);
                     world.getWorldBorder().setSize(radius * 2);
                 });
+                // 懒迁移：已加载但缺少 world_uuid 的家园，填充并写入数据库
+                if (h.getWorldUuid() == null) {
+                    updateWorldUuid(h, world.getUID());
+                }
             }
         }
     }
@@ -1514,16 +1558,41 @@ public class HomelandManager {
         worldKeyIndex.put(h.getWorldKey(), h);
         if (h.hasNether()) worldKeyIndex.put(h.getWorldKey() + "_nether", h);
         if (h.hasEnd()) worldKeyIndex.put(h.getWorldKey() + "_the_end", h);
+        if (h.getWorldUuid() != null) worldUuidIndex.put(h.getWorldUuid(), h);
     }
 
     private void unindexHomeland(Homeland h) {
         worldKeyIndex.remove(h.getWorldKey());
         worldKeyIndex.remove(h.getWorldKey() + "_nether");
         worldKeyIndex.remove(h.getWorldKey() + "_the_end");
+        if (h.getWorldUuid() != null) worldUuidIndex.remove(h.getWorldUuid());
     }
 
     public Homeland getHomelandByWorldKey(String worldKey) {
         return worldKeyIndex.get(worldKey);
+    }
+
+    public Homeland getHomelandByWorldUUID(UUID worldUuid) {
+        return worldUuidIndex.get(worldUuid);
+    }
+
+    /**
+     * 懒迁移：将已加载世界的 UUID 写入数据库和内存索引。
+     */
+    private void updateWorldUuid(Homeland homeland, UUID worldUuid) {
+        homeland.setWorldUuid(worldUuid);
+        worldUuidIndex.put(worldUuid, homeland);
+        plugin.getDatabaseQueue().submit("update-world-uuid", conn -> {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "UPDATE homeland SET world_uuid = ? WHERE id = ?")) {
+                stmt.setString(1, worldUuid.toString());
+                stmt.setInt(2, homeland.getId());
+                stmt.executeUpdate();
+            }
+            return null;
+        }, result -> {}, error -> {
+            plugin.getLogger().warning("更新 world_uuid 失败: " + error.getMessage());
+        });
     }
 
     // ==================== 游戏规则 ====================

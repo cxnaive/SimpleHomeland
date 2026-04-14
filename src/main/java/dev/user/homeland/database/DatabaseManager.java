@@ -95,6 +95,7 @@ public class DatabaseManager {
                     "    owner_uuid VARCHAR(36) NOT NULL," +
                     "    " + nameColumn + "," +
                     "    world_key VARCHAR(64) NOT NULL," +
+                    "    world_uuid VARCHAR(36)," +
                     "    border_radius INT NOT NULL DEFAULT 500," +
                     "    has_nether BOOLEAN DEFAULT FALSE," +
                     "    has_end BOOLEAN DEFAULT FALSE," +
@@ -104,6 +105,14 @@ public class DatabaseManager {
                     "    UNIQUE (owner_uuid, name)" +
                     ")";
             stmt.execute(homelandTable);
+
+            // 迁移：为已有表添加 world_uuid 列
+            try {
+                stmt.execute("ALTER TABLE homeland ADD COLUMN world_uuid VARCHAR(36)");
+                plugin.getLogger().info("已添加 world_uuid 列");
+            } catch (SQLException e) {
+                // 列已存在，忽略
+            }
 
             // 索引
             String[][] indexes = {

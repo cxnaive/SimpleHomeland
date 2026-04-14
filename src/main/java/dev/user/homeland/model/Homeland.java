@@ -10,6 +10,7 @@ public class Homeland {
     private final UUID ownerUuid;
     private final String name;
     private final String worldKey;
+    private volatile UUID worldUuid;
     private final AtomicInteger borderRadius;
     private final AtomicBoolean hasNether;
     private final AtomicBoolean hasEnd;
@@ -17,10 +18,15 @@ public class Homeland {
     private VisitorFlags visitorFlags;
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
+        this(id, ownerUuid, name, worldKey, null, borderRadius, hasNether, hasEnd, isPublic, visitorFlags);
+    }
+
+    public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
         this.id = id;
         this.ownerUuid = ownerUuid;
         this.name = name;
         this.worldKey = worldKey;
+        this.worldUuid = worldUuid;
         this.borderRadius = new AtomicInteger(borderRadius);
         this.hasNether = new AtomicBoolean(hasNether);
         this.hasEnd = new AtomicBoolean(hasEnd);
@@ -32,6 +38,8 @@ public class Homeland {
     public UUID getOwnerUuid() { return ownerUuid; }
     public String getName() { return name; }
     public String getWorldKey() { return worldKey; }
+    public UUID getWorldUuid() { return worldUuid; }
+    public void setWorldUuid(UUID worldUuid) { this.worldUuid = worldUuid; }
     public int getBorderRadius() { return borderRadius.get(); }
     public boolean hasNether() { return hasNether.get(); }
     public boolean hasEnd() { return hasEnd.get(); }
