@@ -41,7 +41,8 @@ public class TeleportListener implements Listener {
 
         Player player = event.getPlayer();
 
-        if (!plugin.getHomelandManager().canEnterWorld(player, toWorld.getKey().getKey())) {
+        if (!plugin.getHomelandManager().canEnterWorld(player, toWorld.getKey().getKey())
+                && !plugin.getHomelandManager().isApiBypass(player.getUniqueId())) {
             event.setCancelled(true);
             MessageUtil.send(player, plugin.getConfigManager().getMessage("world-access-denied"));
         }

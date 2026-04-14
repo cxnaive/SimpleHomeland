@@ -52,6 +52,8 @@ public class HomelandManager {
     private final ConcurrentHashMap<UUID, Object[]> adminNamingInProgress = new ConcurrentHashMap<>();
     // 记录每个家园世界最后有玩家在线的时间（worldKey -> epoch millis）
     private final ConcurrentHashMap<String, Long> lastPlayerPresentTime = new ConcurrentHashMap<>();
+    // API 传送时的权限绕过标记，TeleportListener 会检查此集合
+    private final Set<UUID> apiBypass = ConcurrentHashMap.newKeySet();
 
     public HomelandManager(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
@@ -640,13 +642,21 @@ public class HomelandManager {
      * 异步加载家园世界。加载成功后回调 World（主线程），失败回调 null。
      */
     private void loadHomelandWorldAsync(Homeland homeland, Consumer<World> callback) {
+        loadHomelandWorldAsync(homeland.getWorldKey(), homeland, callback);
+    }
+
+    /**
+     * 异步加载家园世界（支持子维度）。
+     * @param targetWorldKey 实际要加载的世界 key（可以是主世界、_nether、_the_end）
+     */
+    private void loadHomelandWorldAsync(String targetWorldKey, Homeland homeland, Consumer<World> callback) {
         WorldsProvider provider = plugin.getWorldsProvider();
         if (provider == null) {
             callback.accept(null);
             return;
         }
 
-        java.nio.file.Path worldPath = provider.levelView().getWorldContainer().resolve("homelands/" + homeland.getWorldKey());
+        java.nio.file.Path worldPath = provider.levelView().getWorldContainer().resolve("homelands/" + targetWorldKey);
         var builderOpt = provider.levelView().read(worldPath);
         if (builderOpt.isEmpty()) {
             callback.accept(null);
@@ -666,7 +676,7 @@ public class HomelandManager {
                 world.getWorldBorder().setSize(radius * 2);
                 provider.levelView().setEnabled(world, true);
                 world.setAutoSave(true);
-                touchLastPlayerTime(homeland.getWorldKey());
+                touchLastPlayerTime(targetWorldKey);
                 callback.accept(world);
             });
         }).exceptionally(throwable -> {
@@ -692,6 +702,7 @@ public class HomelandManager {
     public void teleportToHomelandAPI(Player player, UUID ownerUuid, String homelandName,
                                        boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
                                        Consumer<TeleportResult> callback) {
+        // 使用 1 参数版本：DB 错误时回调空列表 → 找不到 homeland → WORLD_NOT_FOUND
         getOrLoadHomelandsAsync(ownerUuid, homelands -> {
             Optional<Homeland> optHomeland = homelands.stream()
                     .filter(h -> h.getName().equalsIgnoreCase(homelandName))
@@ -702,8 +713,8 @@ public class HomelandManager {
                 return;
             }
 
-            teleportToHomelandInternal(player, optHomeland.get(), bypassAccessCheck, location, callback);
-        }, () -> callback.accept(TeleportResult.WORLD_NOT_FOUND));
+            teleportToHomelandInternal(player, optHomeland.get(), optHomeland.get().getWorldKey(), bypassAccessCheck, location, callback);
+        });
     }
 
     /**
@@ -724,7 +735,7 @@ public class HomelandManager {
                                                  Consumer<TeleportResult> callback) {
         Homeland homeland = getHomelandByWorldKey(worldKey);
         if (homeland != null) {
-            teleportToHomelandInternal(player, homeland, bypassAccessCheck, location, callback);
+            teleportToHomelandInternal(player, homeland, worldKey, bypassAccessCheck, location, callback);
             return;
         }
 
@@ -739,20 +750,24 @@ public class HomelandManager {
 
     /**
      * API 核心逻辑：权限检查 → 加载世界 → 传送 → 回调。
+     * @param targetWorldKey 实际目标世界 key（可能是子维度如 xxx_nether）
      */
-    private void teleportToHomelandInternal(Player player, Homeland homeland,
+    private void teleportToHomelandInternal(Player player, Homeland homeland, String targetWorldKey,
                                              boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
                                              Consumer<TeleportResult> callback) {
-        if (!bypassAccessCheck && !canEnterWorld(player, homeland.getWorldKey())) {
+        if (!bypassAccessCheck && !canEnterWorld(player, targetWorldKey)) {
             callback.accept(TeleportResult.ACCESS_DENIED);
             return;
         }
 
-        World world = getHomelandWorld(homeland.getWorldKey());
+        // 标记绕过，防止 TeleportListener 二次拦截
+        apiBypass.add(player.getUniqueId());
+
+        World world = getHomelandWorld(targetWorldKey);
         if (world != null) {
             doTeleport(player, world, location, callback);
         } else {
-            loadHomelandWorldAsync(homeland, loadedWorld -> {
+            loadHomelandWorldAsync(targetWorldKey, homeland, loadedWorld -> {
                 if (loadedWorld == null) {
                     callback.accept(TeleportResult.WORLD_LOAD_FAILED);
                     return;
@@ -771,9 +786,20 @@ public class HomelandManager {
         Location target = location != null ? location : world.getSpawnLocation();
         player.getScheduler().execute(plugin, () -> {
             player.teleportAsync(target).thenAccept(success -> {
+                apiBypass.remove(player.getUniqueId());
                 callback.accept(success ? successResult : TeleportResult.PLAYER_OFFLINE);
             });
-        }, () -> callback.accept(TeleportResult.PLAYER_OFFLINE), 1L);
+        }, () -> {
+            apiBypass.remove(player.getUniqueId());
+            callback.accept(TeleportResult.PLAYER_OFFLINE);
+        }, 1L);
+    }
+
+    /**
+     * 检查玩家是否处于 API 绕过状态（用于 TeleportListener 放行）。
+     */
+    public boolean isApiBypass(UUID playerUuid) {
+        return apiBypass.contains(playerUuid);
     }
 
     /**
