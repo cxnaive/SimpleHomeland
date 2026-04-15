@@ -13,6 +13,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPortalEnterEvent;
+import org.bukkit.event.entity.EntityPortalEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 import java.util.Set;
@@ -46,6 +48,42 @@ public class TeleportListener implements Listener {
             event.setCancelled(true);
             MessageUtil.send(player, plugin.getConfigManager().getMessage("world-access-denied"));
         }
+    }
+
+    /**
+     * 拦截传送门传送：如果目标坐标超出家园世界边界，拒绝传送并提示玩家。
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPlayerPortal(PlayerPortalEvent event) {
+        if (isOutsideBorder(event.getTo())) {
+            event.setCancelled(true);
+            MessageUtil.send(event.getPlayer(), plugin.getConfigManager().getMessage(
+                    "portal-destination-outside-border", "radius",
+                    String.valueOf(plugin.getHomelandManager().getHomelandByWorldKey(
+                            event.getTo().getWorld().getKey().getKey()).getBorderRadius())));
+        }
+    }
+
+    /**
+     * 拦截非玩家实体传送门传送：目标超出边界则取消。
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityPortal(EntityPortalEvent event) {
+        if (event.getEntity() instanceof Player) return; // 玩家由 onPlayerPortal 处理
+        if (isOutsideBorder(event.getTo())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * 判断目标位置是否超出家园世界边界。
+     */
+    private boolean isOutsideBorder(org.bukkit.Location to) {
+        if (to == null || to.getWorld() == null) return false;
+        Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(to.getWorld().getKey().getKey());
+        if (homeland == null) return false;
+        int radius = homeland.getBorderRadius();
+        return Math.abs(to.getX()) > radius || Math.abs(to.getZ()) > radius;
     }
 
     /**

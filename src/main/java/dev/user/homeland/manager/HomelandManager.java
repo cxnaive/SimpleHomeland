@@ -4,6 +4,7 @@ import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.api.TeleportResult;
 import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.ConfigManager.GameRuleConfig;
+import dev.user.homeland.config.PriceTier;
 import dev.user.homeland.model.Homeland;
 import dev.user.homeland.model.VisitorFlag;
 import dev.user.homeland.model.VisitorFlags;
@@ -286,8 +287,9 @@ public class HomelandManager {
         final double moneyCost;
         final int pointsCost;
         if (!skipEconomy && messageTarget instanceof Player ownerPlayer) {
-            moneyCost = config.getCreationMoney();
-            pointsCost = config.getCreationPoints();
+            PriceTier tier = config.getCreationCost(getHomelandCount(ownerUuid));
+            moneyCost = tier.getMoney();
+            pointsCost = tier.getPoints();
             if (!checkAndWithdrawEconomy(ownerPlayer, moneyCost, pointsCost)) {
                 lockedOnFailure.run();
                 return;
@@ -709,6 +711,9 @@ public class HomelandManager {
     public void teleportToHomelandAPI(Player player, UUID ownerUuid, String homelandName,
                                        boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
                                        Consumer<TeleportResult> callback) {
+        plugin.getLogger().info("[API] teleportToHomeland: player=" + player.getName()
+                + ", owner=" + ownerUuid + ", name=" + homelandName
+                + ", bypass=" + bypassAccessCheck + ", loc=" + (location != null));
         // 使用 1 参数版本：DB 错误时回调空列表 → 找不到 homeland → WORLD_NOT_FOUND
         getOrLoadHomelandsAsync(ownerUuid, homelands -> {
             Optional<Homeland> optHomeland = homelands.stream()
@@ -716,6 +721,8 @@ public class HomelandManager {
                     .findFirst();
 
             if (optHomeland.isEmpty()) {
+                plugin.getLogger().info("[API] teleportToHomeland: homeland not found for owner=" + ownerUuid
+                        + ", name=" + homelandName + " (have " + homelands.size() + " homelands)");
                 callback.accept(TeleportResult.WORLD_NOT_FOUND);
                 return;
             }
@@ -739,17 +746,24 @@ public class HomelandManager {
     public void teleportToHomelandByWorldUUIDAPI(Player player, UUID worldUUID,
                                                    boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
                                                    Consumer<TeleportResult> callback) {
+        plugin.getLogger().info("[API] teleportByWorldUUID: player=" + player.getName()
+                + ", worldUUID=" + worldUUID + ", bypass=" + bypassAccessCheck
+                + ", loc=" + (location != null));
         Homeland homeland = worldUuidIndex.get(worldUUID);
         if (homeland != null) {
+            plugin.getLogger().info("[API] teleportByWorldUUID: index hit, worldKey=" + homeland.getWorldKey());
             teleportToHomelandInternal(player, homeland, homeland.getWorldKey(), bypassAccessCheck, location, callback);
             return;
         }
 
         // 非家园世界，尝试按 Bukkit UUID 查找
+        plugin.getLogger().info("[API] teleportByWorldUUID: index miss, falling back to Bukkit.getWorld");
         World bukkitWorld = Bukkit.getWorld(worldUUID);
         if (bukkitWorld != null) {
+            plugin.getLogger().info("[API] teleportByWorldUUID: Bukkit found world=" + bukkitWorld.getName());
             doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
         } else {
+            plugin.getLogger().info("[API] teleportByWorldUUID: world not found anywhere");
             callback.accept(TeleportResult.WORLD_NOT_FOUND);
         }
     }
@@ -770,17 +784,24 @@ public class HomelandManager {
     public void teleportToHomelandByWorldKeyAPI(Player player, String worldKey,
                                                  boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
                                                  Consumer<TeleportResult> callback) {
+        plugin.getLogger().info("[API] teleportByWorldKey: player=" + player.getName()
+                + ", worldKey=" + worldKey + ", bypass=" + bypassAccessCheck
+                + ", loc=" + (location != null));
         Homeland homeland = getHomelandByWorldKey(worldKey);
         if (homeland != null) {
+            plugin.getLogger().info("[API] teleportByWorldKey: index hit, owner=" + homeland.getOwnerUuid());
             teleportToHomelandInternal(player, homeland, worldKey, bypassAccessCheck, location, callback);
             return;
         }
 
         // 非家园世界，尝试按 Bukkit 名称查找
+        plugin.getLogger().info("[API] teleportByWorldKey: index miss, falling back to Bukkit.getWorld");
         World bukkitWorld = Bukkit.getWorld(worldKey);
         if (bukkitWorld != null) {
+            plugin.getLogger().info("[API] teleportByWorldKey: Bukkit found world=" + bukkitWorld.getName());
             doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
         } else {
+            plugin.getLogger().info("[API] teleportByWorldKey: world not found anywhere");
             callback.accept(TeleportResult.WORLD_NOT_FOUND);
         }
     }
@@ -792,7 +813,10 @@ public class HomelandManager {
     private void teleportToHomelandInternal(Player player, Homeland homeland, String targetWorldKey,
                                              boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
                                              Consumer<TeleportResult> callback) {
+        plugin.getLogger().info("[API] internal: player=" + player.getName()
+                + ", worldKey=" + targetWorldKey + ", bypass=" + bypassAccessCheck);
         if (!bypassAccessCheck && !canEnterWorld(player, targetWorldKey)) {
+            plugin.getLogger().info("[API] internal: ACCESS_DENIED for player=" + player.getName());
             callback.accept(TeleportResult.ACCESS_DENIED);
             return;
         }
@@ -802,14 +826,18 @@ public class HomelandManager {
 
         World world = getHomelandWorld(targetWorldKey);
         if (world != null) {
+            plugin.getLogger().info("[API] internal: world already loaded, teleporting");
             doTeleport(player, world, location, callback);
         } else {
+            plugin.getLogger().info("[API] internal: world not loaded, loading async...");
             loadHomelandWorldAsync(targetWorldKey, homeland, loadedWorld -> {
                 if (loadedWorld == null) {
+                    plugin.getLogger().info("[API] internal: async load FAILED for worldKey=" + targetWorldKey);
                     apiBypass.remove(player.getUniqueId());
                     callback.accept(TeleportResult.WORLD_LOAD_FAILED);
                     return;
                 }
+                plugin.getLogger().info("[API] internal: async load success, teleporting");
                 doTeleport(player, loadedWorld, location, callback);
             });
         }
@@ -824,13 +852,19 @@ public class HomelandManager {
         Location target = location != null
                 ? new Location(world, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch())
                 : world.getSpawnLocation();
+        plugin.getLogger().info("[API] doTeleport: player=" + player.getName()
+                + ", world=" + world.getName() + ", target=" + target.toVector()
+                + ", expectedResult=" + successResult);
         player.getScheduler().execute(plugin, () -> {
             player.teleportAsync(target).thenAccept(success -> {
                 apiBypass.remove(player.getUniqueId());
-                callback.accept(success ? successResult : TeleportResult.PLAYER_OFFLINE);
+                TeleportResult result = success ? successResult : TeleportResult.PLAYER_OFFLINE;
+                plugin.getLogger().info("[API] doTeleport: result=" + result + " for player=" + player.getName());
+                callback.accept(result);
             });
         }, () -> {
             apiBypass.remove(player.getUniqueId());
+            plugin.getLogger().info("[API] doTeleport: PLAYER_OFFLINE (retired) for player=" + player.getName());
             callback.accept(TeleportResult.PLAYER_OFFLINE);
         }, 1L);
     }
@@ -892,8 +926,9 @@ public class HomelandManager {
         final double moneyCost;
         final int pointsCost;
         if (!skipEconomy) {
-            moneyCost = config.getExpansionMoney();
-            pointsCost = config.getExpansionPoints();
+            PriceTier tier = config.getExpansionCost(oldRadius);
+            moneyCost = tier.getMoney();
+            pointsCost = tier.getPoints();
             if (economyPlayer == null || !checkAndWithdrawEconomy(economyPlayer, moneyCost, pointsCost)) {
                 onFailure.run();
                 return;
@@ -1441,6 +1476,13 @@ public class HomelandManager {
             return index;
         }, index -> {
             worldKeyIndex.putAll(index);
+            // 同步填充 worldUuidIndex（去重，同一 Homeland 可能对应多个 worldKey）
+            java.util.Set<Homeland> unique = new java.util.HashSet<>(index.values());
+            for (Homeland h : unique) {
+                if (h.getWorldUuid() != null) {
+                    worldUuidIndex.put(h.getWorldUuid(), h);
+                }
+            }
             plugin.getLogger().info("已加载 " + index.size() + " 个家园世界索引");
             // 恢复已加载世界的 WorldBorder
             restoreWorldBorders();

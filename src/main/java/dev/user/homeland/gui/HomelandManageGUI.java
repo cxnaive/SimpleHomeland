@@ -3,6 +3,7 @@ package dev.user.homeland.gui;
 import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.GUIConfig;
+import dev.user.homeland.config.PriceTier;
 import dev.user.homeland.model.Homeland;
 import dev.user.homeland.util.MessageUtil;
 import net.kyori.adventure.text.Component;
@@ -365,13 +366,16 @@ public class HomelandManageGUI extends AbstractGUI {
                 "new", String.valueOf(newRadius))));
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
 
-        if (config.getExpansionMoney() > 0) {
-            lore.add(MessageUtil.guiLore(config.getMessage("gui.expand-item-money", "money", String.format("%.0f", config.getExpansionMoney()))));
+        PriceTier tier = config.getExpansionCost(h.getBorderRadius());
+        double expandMoney = tier.getMoney();
+        int expandPoints = tier.getPoints();
+        if (expandMoney > 0) {
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.expand-item-money", "money", String.format("%.0f", expandMoney))));
         }
-        if (config.getExpansionPoints() > 0) {
-            lore.add(MessageUtil.guiLore(config.getMessage("gui.expand-item-points", "points", String.valueOf(config.getExpansionPoints()))));
+        if (expandPoints > 0) {
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.expand-item-points", "points", String.valueOf(expandPoints))));
         }
-        if (config.getExpansionMoney() == 0 && config.getExpansionPoints() == 0) {
+        if (expandMoney == 0 && expandPoints == 0) {
             lore.add(MessageUtil.guiLore(config.getMessage("gui.expand-item-free")));
         }
 

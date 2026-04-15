@@ -76,6 +76,9 @@ public class HomelandVisitorFlagGUI extends AbstractGUI {
                 (flag, value) -> {
                     lobbyFlags.set(flag, value);
                     plugin.getConfigManager().saveLobbyVisitorFlags(lobbyFlags);
+                    String valueStr = value ? "允许" : "禁止";
+                    MessageUtil.send(player, plugin.getConfigManager().getMessage(
+                            "visitor-flag-updated", "flag", flag.getDisplayName(), "value", valueStr));
                     player.getScheduler().execute(plugin, () -> holder[0].refresh(), () -> {}, 0L);
                 },
                 () -> HomelandAdminGUI.open(plugin, player));

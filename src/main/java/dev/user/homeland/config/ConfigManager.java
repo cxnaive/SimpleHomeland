@@ -44,10 +44,8 @@ public class ConfigManager {
     private int netherUnlockPoints;
     private double endUnlockMoney;
     private int endUnlockPoints;
-    private double creationMoney;
-    private int creationPoints;
-    private double expansionMoney;
-    private int expansionPoints;
+    private List<PriceTier> creationTiers;
+    private List<ExpansionPriceTier> expansionTiers;
     private String worldSeed;
     private boolean worldStructures;
     private boolean worldBonusChest;
@@ -97,10 +95,25 @@ public class ConfigManager {
         this.netherUnlockPoints = config.getInt("homeland.nether-unlock.points", 0);
         this.endUnlockMoney = config.getDouble("homeland.end-unlock.money", 1000.0);
         this.endUnlockPoints = config.getInt("homeland.end-unlock.points", 0);
-        this.creationMoney = config.getDouble("homeland.creation.money", 1000.0);
-        this.creationPoints = config.getInt("homeland.creation.points", 0);
-        this.expansionMoney = config.getDouble("homeland.expansion.money", 100.0);
-        this.expansionPoints = config.getInt("homeland.expansion.points", 0);
+        // 创建费用阶梯
+        List<?> creationTierList = config.getMapList("homeland.creation.tiers");
+        if (creationTierList.isEmpty()) {
+            this.creationTiers = List.of(new PriceTier(
+                    config.getDouble("homeland.creation.money", 1000.0),
+                    config.getInt("homeland.creation.points", 0)));
+        } else {
+            this.creationTiers = parseCreationTiers(creationTierList);
+        }
+
+        // 扩展费用阶梯
+        List<?> expansionTierList = config.getMapList("homeland.expansion.tiers");
+        if (expansionTierList.isEmpty()) {
+            this.expansionTiers = List.of(new ExpansionPriceTier(0,
+                    config.getDouble("homeland.expansion.money", 100.0),
+                    config.getInt("homeland.expansion.points", 0)));
+        } else {
+            this.expansionTiers = parseExpansionTiers(expansionTierList);
+        }
         this.worldSeed = config.getString("homeland.world.seed", "");
         this.worldStructures = config.getBoolean("homeland.world.structures", true);
         this.worldBonusChest = config.getBoolean("homeland.world.bonus-chest", false);
@@ -224,10 +237,25 @@ public class ConfigManager {
     public int getNetherUnlockPoints() { return netherUnlockPoints; }
     public double getEndUnlockMoney() { return endUnlockMoney; }
     public int getEndUnlockPoints() { return endUnlockPoints; }
-    public double getCreationMoney() { return creationMoney; }
-    public int getCreationPoints() { return creationPoints; }
-    public double getExpansionMoney() { return expansionMoney; }
-    public int getExpansionPoints() { return expansionPoints; }
+
+    public PriceTier getCreationCost(int currentCount) {
+        if (creationTiers.isEmpty()) return new PriceTier(0, 0);
+        int index = Math.min(currentCount, creationTiers.size() - 1);
+        return creationTiers.get(index);
+    }
+
+    public PriceTier getExpansionCost(int currentRadius) {
+        if (expansionTiers.isEmpty()) return new PriceTier(0, 0);
+        // 按 minRadius 降序找第一个匹配的档位
+        for (int i = expansionTiers.size() - 1; i >= 0; i--) {
+            if (currentRadius >= expansionTiers.get(i).getMinRadius()) {
+                ExpansionPriceTier tier = expansionTiers.get(i);
+                return new PriceTier(tier.getMoney(), tier.getPoints());
+            }
+        }
+        ExpansionPriceTier first = expansionTiers.get(0);
+        return new PriceTier(first.getMoney(), first.getPoints());
+    }
     public String getWorldSeed() { return worldSeed; }
     public boolean isWorldStructures() { return worldStructures; }
     public boolean isWorldBonusChest() { return worldBonusChest; }
@@ -250,6 +278,40 @@ public class ConfigManager {
         this.lobbyVisitorFlags = flags;
         config.set("lobby-visitor-flags", flags.toJson());
         plugin.saveConfig();
+    }
+
+    // ==================== 价格阶梯解析 ====================
+
+    @SuppressWarnings("unchecked")
+    private List<PriceTier> parseCreationTiers(List<?> tierList) {
+        List<PriceTier> tiers = new ArrayList<>();
+        for (Object obj : tierList) {
+            if (obj instanceof Map<?, ?> map) {
+                Map<String, Object> m = (Map<String, Object>) map;
+                double money = m.containsKey("money") ? ((Number) m.get("money")).doubleValue() : 0;
+                int points = m.containsKey("points") ? ((Number) m.get("points")).intValue() : 0;
+                tiers.add(new PriceTier(money, points));
+            }
+        }
+        if (tiers.isEmpty()) tiers.add(new PriceTier(1000.0, 0));
+        return tiers;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ExpansionPriceTier> parseExpansionTiers(List<?> tierList) {
+        List<ExpansionPriceTier> tiers = new ArrayList<>();
+        for (Object obj : tierList) {
+            if (obj instanceof Map<?, ?> map) {
+                Map<String, Object> m = (Map<String, Object>) map;
+                int minRadius = m.containsKey("min-radius") ? ((Number) m.get("min-radius")).intValue() : 0;
+                double money = m.containsKey("money") ? ((Number) m.get("money")).doubleValue() : 0;
+                int points = m.containsKey("points") ? ((Number) m.get("points")).intValue() : 0;
+                tiers.add(new ExpansionPriceTier(minRadius, money, points));
+            }
+        }
+        if (tiers.isEmpty()) tiers.add(new ExpansionPriceTier(0, 100.0, 0));
+        tiers.sort((a, b) -> Integer.compare(a.getMinRadius(), b.getMinRadius()));
+        return tiers;
     }
 
     // ==================== GameRuleConfig 内部类 ====================

@@ -157,6 +157,7 @@ public class HomelandProtectionListener implements Listener {
                 String worldKey = block.getWorld().getKey().getKey();
                 if (!plugin.getHomelandManager().checkVisitorFlag(event.getPlayer(), worldKey, VisitorFlag.FARMING)) {
                     event.setCancelled(true);
+                    sendDenied(event.getPlayer());
                 }
             }
             return;
@@ -252,6 +253,7 @@ public class HomelandProtectionListener implements Listener {
         String worldKey = player.getWorld().getKey().getKey();
         if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.PICKUP)) {
             event.setCancelled(true);
+            sendDenied(player);
         }
     }
 

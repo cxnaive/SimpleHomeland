@@ -22,11 +22,28 @@ homeland:
     money: 1000.0
     points: 0
   creation:
-    money: 1000.0
-    points: 0
+    # 阶梯费用：第1个、第2个、第3个... 超出列表取最后一档
+    # 设为 0 表示免费
+    tiers:
+      - money: 1000
+        points: 0
+      - money: 2000
+        points: 0
+      - money: 5000
+        points: 10
   expansion:
-    money: 100.0
-    points: 0
+    # 阶梯费用：按当前半径区间计费
+    # min-radius: 当前半径 >= 此值时使用该档位
+    tiers:
+      - min-radius: 0
+        money: 100
+        points: 0
+      - min-radius: 1000
+        money: 200
+        points: 0
+      - min-radius: 2000
+        money: 500
+        points: 5
   world:
     # 种子（空=随机，非空则所有家园共享相同地形）
     seed: ""

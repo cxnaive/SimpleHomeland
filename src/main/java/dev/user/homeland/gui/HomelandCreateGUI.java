@@ -3,6 +3,7 @@ package dev.user.homeland.gui;
 import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.GUIConfig;
+import dev.user.homeland.config.PriceTier;
 import dev.user.homeland.util.MessageUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -97,6 +98,22 @@ public class HomelandCreateGUI extends AbstractGUI {
         }
     }
 
+    private void addCostLore(List<Component> lore, ConfigManager config) {
+        if (adminMode) return;
+        int count = plugin.getHomelandManager().getHomelandCount(player.getUniqueId());
+        PriceTier tier = config.getCreationCost(count);
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        if (tier.getMoney() > 0) {
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-money", "money", String.format("%.0f", tier.getMoney()))));
+        }
+        if (tier.getPoints() > 0) {
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-points", "points", String.valueOf(tier.getPoints()))));
+        }
+        if (tier.getMoney() == 0 && tier.getPoints() == 0) {
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-free")));
+        }
+    }
+
     private ItemStack createDefaultItem() {
         ItemStack item = new ItemStack(cfg.getDefaultMaterial());
         ItemMeta meta = item.getItemMeta();
@@ -108,6 +125,7 @@ public class HomelandCreateGUI extends AbstractGUI {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-default-lore")));
+        addCostLore(lore, config);
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-click")));
 
@@ -127,6 +145,7 @@ public class HomelandCreateGUI extends AbstractGUI {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-void-lore")));
+        addCostLore(lore, config);
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-click")));
 
@@ -146,6 +165,7 @@ public class HomelandCreateGUI extends AbstractGUI {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-flat-lore")));
+        addCostLore(lore, config);
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-click")));
 

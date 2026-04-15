@@ -3,6 +3,7 @@ package dev.user.homeland.gui;
 import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.GUIConfig;
+import dev.user.homeland.config.PriceTier;
 import dev.user.homeland.model.Homeland;
 import dev.user.homeland.util.MessageUtil;
 import net.kyori.adventure.text.Component;
@@ -136,13 +137,15 @@ public class HomelandGUI extends AbstractGUI {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
 
-        if (config.getCreationMoney() > 0) {
-            lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-money", "money", String.format("%.0f", config.getCreationMoney()))));
+        PriceTier tier = config.getCreationCost(
+                plugin.getHomelandManager().getHomelandCount(player.getUniqueId()));
+        if (tier.getMoney() > 0) {
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-money", "money", String.format("%.0f", tier.getMoney()))));
         }
-        if (config.getCreationPoints() > 0) {
-            lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-points", "points", String.valueOf(config.getCreationPoints()))));
+        if (tier.getPoints() > 0) {
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-points", "points", String.valueOf(tier.getPoints()))));
         }
-        if (config.getCreationMoney() == 0 && config.getCreationPoints() == 0) {
+        if (tier.getMoney() == 0 && tier.getPoints() == 0) {
             lore.add(MessageUtil.guiLore(config.getMessage("gui.create-item-free")));
         }
 
