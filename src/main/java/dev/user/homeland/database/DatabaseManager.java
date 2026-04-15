@@ -114,6 +114,14 @@ public class DatabaseManager {
                 // 列已存在，忽略
             }
 
+            // 迁移：为已有表添加 world_type 列
+            try {
+                stmt.execute("ALTER TABLE homeland ADD COLUMN world_type VARCHAR(16) DEFAULT 'default'");
+                plugin.getLogger().info("已添加 world_type 列");
+            } catch (SQLException e) {
+                // 列已存在，忽略
+            }
+
             // 索引
             String[][] indexes = {
                     {"idx_homeland_owner", "homeland", "owner_uuid"},

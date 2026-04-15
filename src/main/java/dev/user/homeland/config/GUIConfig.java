@@ -21,6 +21,7 @@ public class GUIConfig {
     private final Visitor visitor;
     private final VisitorFlag visitorFlag;
     private final InviteManage inviteManage;
+    private final Reset reset;
 
     public GUIConfig(FileConfiguration config) {
         this.global = new Global(safeSection(config, "global"));
@@ -32,6 +33,7 @@ public class GUIConfig {
         this.visitor = new Visitor(safeSection(config, "visitor"));
         this.visitorFlag = new VisitorFlag(safeSection(config, "visitor-flag"));
         this.inviteManage = new InviteManage(safeSection(config, "invite-manage"));
+        this.reset = new Reset(safeSection(config, "reset"));
     }
 
     public Global getGlobal() { return global; }
@@ -43,6 +45,7 @@ public class GUIConfig {
     public Visitor getVisitor() { return visitor; }
     public VisitorFlag getVisitorFlag() { return visitorFlag; }
     public InviteManage getInviteManage() { return inviteManage; }
+    public Reset getReset() { return reset; }
 
     // ==================== 辅助方法 ====================
 
@@ -107,6 +110,7 @@ public class GUIConfig {
         private final int closeSlot;
         private final int onlinePlayersSlot;
         private final Material onlinePlayersMaterial;
+        private final Material invitedMaterial;
 
         public HomelandList(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
@@ -124,6 +128,7 @@ public class GUIConfig {
             this.closeSlot = sec.getInt("close-slot", 49);
             this.onlinePlayersSlot = sec.getInt("online-players-slot", 50);
             this.onlinePlayersMaterial = parseMaterial(sec, "online-players-material", "PLAYER_HEAD");
+            this.invitedMaterial = parseMaterial(sec, "invited-material", "OAK_DOOR");
         }
 
         public int getSize() { return size; }
@@ -141,6 +146,7 @@ public class GUIConfig {
         public int getCloseSlot() { return closeSlot; }
         public int getOnlinePlayersSlot() { return onlinePlayersSlot; }
         public Material getOnlinePlayersMaterial() { return onlinePlayersMaterial; }
+        public Material getInvitedMaterial() { return invitedMaterial; }
     }
 
     // ==================== 家园管理 GUI ====================
@@ -180,6 +186,8 @@ public class GUIConfig {
         private final int closeSlot;
         private final int visitorFlagSlot;
         private final Material visitorFlagMaterial;
+        private final int resetSlot;
+        private final Material resetMaterial;
 
         public Manage(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
@@ -216,6 +224,8 @@ public class GUIConfig {
             this.closeSlot = sec.getInt("close-slot", 53);
             this.visitorFlagSlot = sec.getInt("visitor-flag-slot", 24);
             this.visitorFlagMaterial = parseMaterial(sec, "visitor-flag-material", "OAK_SIGN");
+            this.resetSlot = sec.getInt("reset-slot", 34);
+            this.resetMaterial = parseMaterial(sec, "reset-material", "SPONGE");
         }
 
         public int getSize() { return size; }
@@ -252,6 +262,8 @@ public class GUIConfig {
         public int getCloseSlot() { return closeSlot; }
         public int getVisitorFlagSlot() { return visitorFlagSlot; }
         public Material getVisitorFlagMaterial() { return visitorFlagMaterial; }
+        public int getResetSlot() { return resetSlot; }
+        public Material getResetMaterial() { return resetMaterial; }
     }
 
     // ==================== 创建家园地形选择 GUI ====================
@@ -486,8 +498,8 @@ public class GUIConfig {
                 this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 19, 28, 37});
                 this.pagePrevSlot = sec.getInt("page-prev-slot", 46);
                 this.pageNextSlot = sec.getInt("page-next-slot", 53);
-                this.homelandAccessibleMaterial = parseMaterial(sec, "homeland-accessible-material", "LIME_STAINED_GLASS_PANE");
-                this.homelandDeniedMaterial = parseMaterial(sec, "homeland-denied-material", "RED_STAINED_GLASS_PANE");
+                this.homelandAccessibleMaterial = parseMaterial(sec, "homeland-accessible-material", "GRASS_BLOCK");
+                this.homelandDeniedMaterial = parseMaterial(sec, "homeland-denied-material", "REDSTONE_BLOCK");
                 this.emptySlot = sec.getInt("empty-slot", 22);
                 this.emptyMaterial = parseMaterial(sec, "empty-material", "BARRIER");
                 this.backSlot = sec.getInt("back-slot", 45);
@@ -591,6 +603,45 @@ public class GUIConfig {
         public int getPageInfoSlot() { return pageInfoSlot; }
         public int getNextSlot() { return nextSlot; }
         public int getBackSlot() { return backSlot; }
+        public int getCloseSlot() { return closeSlot; }
+    }
+
+    // ==================== 重置世界 GUI ====================
+
+    public static class Reset {
+        private final int size;
+        private final int overworldSlot;
+        private final Material overworldMaterial;
+        private final int netherSlot;
+        private final Material netherMaterial;
+        private final int endSlot;
+        private final Material endMaterial;
+        private final Material lockedMaterial;
+        private final Material confirmMaterial;
+        private final int closeSlot;
+
+        public Reset(ConfigurationSection sec) {
+            this.size = sec.getInt("size", 27);
+            this.overworldSlot = sec.getInt("overworld-slot", 11);
+            this.overworldMaterial = parseMaterial(sec, "overworld-material", "GRASS_BLOCK");
+            this.netherSlot = sec.getInt("nether-slot", 13);
+            this.netherMaterial = parseMaterial(sec, "nether-material", "NETHERRACK");
+            this.endSlot = sec.getInt("end-slot", 15);
+            this.endMaterial = parseMaterial(sec, "end-material", "END_STONE");
+            this.lockedMaterial = parseMaterial(sec, "locked-material", "BARRIER");
+            this.confirmMaterial = parseMaterial(sec, "confirm-material", "YELLOW_STAINED_GLASS_PANE");
+            this.closeSlot = sec.getInt("close-slot", 22);
+        }
+
+        public int getSize() { return size; }
+        public int getOverworldSlot() { return overworldSlot; }
+        public Material getOverworldMaterial() { return overworldMaterial; }
+        public int getNetherSlot() { return netherSlot; }
+        public Material getNetherMaterial() { return netherMaterial; }
+        public int getEndSlot() { return endSlot; }
+        public Material getEndMaterial() { return endMaterial; }
+        public Material getLockedMaterial() { return lockedMaterial; }
+        public Material getConfirmMaterial() { return confirmMaterial; }
         public int getCloseSlot() { return closeSlot; }
     }
 }

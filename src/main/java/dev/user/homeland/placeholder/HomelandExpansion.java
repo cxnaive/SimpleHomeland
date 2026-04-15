@@ -107,6 +107,24 @@ public class HomelandExpansion extends PlaceholderExpansion {
                     .orElse("false");
         }
 
+        // %simplehomeland_current_owner% — 当前所在世界的家园主人名字
+        if (param.equals("current_owner")) {
+            if (!(player instanceof org.bukkit.entity.Player onlinePlayer)) return "";
+            World world = onlinePlayer.getWorld();
+            String worldKey = world.getKey().getKey();
+
+            // 去除维度后缀以获取主世界 key
+            String baseKey = worldKey;
+            if (worldKey.endsWith("_nether")) baseKey = worldKey.substring(0, worldKey.length() - 7);
+            else if (worldKey.endsWith("_the_end")) baseKey = worldKey.substring(0, worldKey.length() - 8);
+
+            Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(baseKey);
+            if (homeland == null) return "";
+
+            String ownerName = plugin.getServer().getOfflinePlayer(homeland.getOwnerUuid()).getName();
+            return ownerName != null ? ownerName : homeland.getOwnerUuid().toString().substring(0, 8);
+        }
+
         // %simplehomeland_current% — 当前所在世界信息
         if (param.equals("current")) {
             if (!(player instanceof org.bukkit.entity.Player onlinePlayer)) return "";

@@ -11,6 +11,7 @@ public class Homeland {
     private final String name;
     private final String worldKey;
     private volatile UUID worldUuid;
+    private volatile String worldType;
     private final AtomicInteger borderRadius;
     private final AtomicBoolean hasNether;
     private final AtomicBoolean hasEnd;
@@ -18,15 +19,20 @@ public class Homeland {
     private VisitorFlags visitorFlags;
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
-        this(id, ownerUuid, name, worldKey, null, borderRadius, hasNether, hasEnd, isPublic, visitorFlags);
+        this(id, ownerUuid, name, worldKey, null, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags);
     }
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
+        this(id, ownerUuid, name, worldKey, worldUuid, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags);
+    }
+
+    public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, String worldType, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
         this.id = id;
         this.ownerUuid = ownerUuid;
         this.name = name;
         this.worldKey = worldKey;
         this.worldUuid = worldUuid;
+        this.worldType = worldType != null ? worldType : "default";
         this.borderRadius = new AtomicInteger(borderRadius);
         this.hasNether = new AtomicBoolean(hasNether);
         this.hasEnd = new AtomicBoolean(hasEnd);
@@ -40,6 +46,8 @@ public class Homeland {
     public String getWorldKey() { return worldKey; }
     public UUID getWorldUuid() { return worldUuid; }
     public void setWorldUuid(UUID worldUuid) { this.worldUuid = worldUuid; }
+    public String getWorldType() { return worldType; }
+    public void setWorldType(String worldType) { this.worldType = worldType != null ? worldType : "default"; }
     public int getBorderRadius() { return borderRadius.get(); }
     public boolean hasNether() { return hasNether.get(); }
     public boolean hasEnd() { return hasEnd.get(); }

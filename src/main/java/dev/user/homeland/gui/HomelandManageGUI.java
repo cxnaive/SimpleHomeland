@@ -84,8 +84,8 @@ public class HomelandManageGUI extends AbstractGUI {
 
         // 地狱
         boolean canUnlockNether = isAdmin || player.hasPermission("simplehomeland.homeland.unlock.nether");
-        if (canUnlockNether) {
-            if (!homeland.hasNether()) {
+        if (!homeland.hasNether()) {
+            if (canUnlockNether) {
                 if (isAdmin) {
                     setItem(cfg.getNetherSlot(), createUnlockAdminItem(config, "gui.unlock-nether-item-name"), (p, e) -> {
                         plugin.getHomelandManager().unlockNetherAdmin(p, targetUuid, homelandName,
@@ -100,26 +100,29 @@ public class HomelandManageGUI extends AbstractGUI {
                                 () -> {});
                     });
                 }
-            } else if ("nether".equals(pendingLockDimension)) {
-                setItem(cfg.getNetherSlot(), createLockConfirmItem(cfg.getNetherConfirmMaterial(), "地狱"), (p, e) -> {
-                    pendingLockDimension = null;
-                    if (isAdmin) {
-                        plugin.getHomelandManager().lockNetherAdmin(p, targetUuid, homelandName,
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
-                    } else {
-                        plugin.getHomelandManager().lockNether(p, homelandName,
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
-                    }
-                });
             } else {
-                setItem(cfg.getNetherSlot(), createLockDimensionItem(cfg.getNetherLockMaterial(), "gui.lock-nether-item-name",
-                        "gui.lock-nether-item-lore", "gui.lock-nether-item-click"), (p, e) -> {
-                    pendingLockDimension = "nether";
-                    refresh();
-                });
+                setItem(cfg.getNetherSlot(), createNoPermissionItem(config, "gui.unlock-nether-item-name",
+                        cfg.getNetherUnlockMaterial()));
             }
+        } else if ("nether".equals(pendingLockDimension)) {
+            setItem(cfg.getNetherSlot(), createLockConfirmItem(cfg.getNetherConfirmMaterial(), "地狱"), (p, e) -> {
+                pendingLockDimension = null;
+                if (isAdmin) {
+                    plugin.getHomelandManager().lockNetherAdmin(p, targetUuid, homelandName,
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
+                } else {
+                    plugin.getHomelandManager().lockNether(p, homelandName,
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
+                }
+            });
+        } else {
+            setItem(cfg.getNetherSlot(), createLockDimensionItem(cfg.getNetherLockMaterial(), "gui.lock-nether-item-name",
+                    "gui.lock-nether-item-lore", "gui.lock-nether-item-click"), (p, e) -> {
+                pendingLockDimension = "nether";
+                refresh();
+            });
         }
 
         // 传送到家园
@@ -156,8 +159,8 @@ public class HomelandManageGUI extends AbstractGUI {
 
         // 末地
         boolean canUnlockEnd = isAdmin || player.hasPermission("simplehomeland.homeland.unlock.end");
-        if (canUnlockEnd) {
-            if (!homeland.hasEnd()) {
+        if (!homeland.hasEnd()) {
+            if (canUnlockEnd) {
                 if (isAdmin) {
                     setItem(cfg.getEndSlot(), createUnlockAdminItem(config, "gui.unlock-end-item-name"), (p, e) -> {
                         plugin.getHomelandManager().unlockEndAdmin(p, targetUuid, homelandName,
@@ -172,26 +175,29 @@ public class HomelandManageGUI extends AbstractGUI {
                                 () -> {});
                     });
                 }
-            } else if ("end".equals(pendingLockDimension)) {
-                setItem(cfg.getEndSlot(), createLockConfirmItem(cfg.getEndConfirmMaterial(), "末地"), (p, e) -> {
-                    pendingLockDimension = null;
-                    if (isAdmin) {
-                        plugin.getHomelandManager().lockEndAdmin(p, targetUuid, homelandName,
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
-                    } else {
-                        plugin.getHomelandManager().lockEnd(p, homelandName,
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
-                                () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
-                    }
-                });
             } else {
-                setItem(cfg.getEndSlot(), createLockDimensionItem(cfg.getEndLockMaterial(), "gui.lock-end-item-name",
-                        "gui.lock-end-item-lore", "gui.lock-end-item-click"), (p, e) -> {
-                    pendingLockDimension = "end";
-                    refresh();
-                });
+                setItem(cfg.getEndSlot(), createNoPermissionItem(config, "gui.unlock-end-item-name",
+                        cfg.getEndUnlockMaterial()));
             }
+        } else if ("end".equals(pendingLockDimension)) {
+            setItem(cfg.getEndSlot(), createLockConfirmItem(cfg.getEndConfirmMaterial(), "末地"), (p, e) -> {
+                pendingLockDimension = null;
+                if (isAdmin) {
+                    plugin.getHomelandManager().lockEndAdmin(p, targetUuid, homelandName,
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
+                } else {
+                    plugin.getHomelandManager().lockEnd(p, homelandName,
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
+                            () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
+                }
+            });
+        } else {
+            setItem(cfg.getEndSlot(), createLockDimensionItem(cfg.getEndLockMaterial(), "gui.lock-end-item-name",
+                    "gui.lock-end-item-lore", "gui.lock-end-item-click"), (p, e) -> {
+                pendingLockDimension = "end";
+                refresh();
+            });
         }
 
         // 公开/私有切换
@@ -259,6 +265,16 @@ public class HomelandManageGUI extends AbstractGUI {
                 HomelandVisitorFlagGUI.open(plugin, p, homelandName);
             });
         }
+
+        // 重置世界按钮
+        setItem(cfg.getResetSlot(), createResetItem(), (p, e) -> {
+            close();
+            if (isAdmin) {
+                HomelandResetGUI.openAdmin(plugin, p, targetUuid, targetName, homelandName);
+            } else {
+                HomelandResetGUI.open(plugin, p, homelandName);
+            }
+        });
 
         // 删除按钮
         boolean canDelete = isAdmin || player.hasPermission("simplehomeland.homeland.delete");
@@ -633,6 +649,39 @@ public class HomelandManageGUI extends AbstractGUI {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.visitor-flag-item-lore")));
+
+        meta.lore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private ItemStack createResetItem() {
+        ItemStack item = new ItemStack(cfg.getResetMaterial());
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        ConfigManager config = plugin.getConfigManager();
+        meta.displayName(MessageUtil.guiName(config.getMessage("gui.reset-item-name")));
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.reset-item-lore")));
+
+        meta.lore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private ItemStack createNoPermissionItem(ConfigManager config, String nameKey, Material material) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        meta.displayName(MessageUtil.guiName(config.getMessage(nameKey)));
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.homeland-item-no-permission")));
 
         meta.lore(lore);
         item.setItemMeta(meta);

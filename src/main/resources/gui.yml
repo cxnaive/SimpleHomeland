@@ -23,6 +23,8 @@ homeland-list:
   page-next-slot: 53
   # 家园物品材质
   homeland-material: GRASS_BLOCK
+  # 被邀请家园物品材质
+  invited-material: OAK_DOOR
   # 空列表提示
   empty-slot: 22
   empty-material: BARRIER
@@ -81,6 +83,9 @@ manage:
   # 访客权限按钮
   visitor-flag-slot: 22
   visitor-flag-material: OAK_SIGN
+  # 重置世界按钮
+  reset-slot: 33
+  reset-material: SPONGE
   # 导航
   back-slot: 45
   close-slot: 53
@@ -169,8 +174,8 @@ visitor:
     page-slots: [10, 19, 28, 37]
     page-prev-slot: 46
     page-next-slot: 53
-    homeland-accessible-material: LIME_STAINED_GLASS_PANE
-    homeland-denied-material: RED_STAINED_GLASS_PANE
+    homeland-accessible-material: GRASS_BLOCK
+    homeland-denied-material: REDSTONE_BLOCK
     empty-slot: 22
     empty-material: BARRIER
     back-slot: 45
@@ -203,3 +208,16 @@ invite-manage:
   next-slot: 51
   back-slot: 45
   close-slot: 53
+
+# ==================== 重置世界 GUI ====================
+reset:
+  size: 27
+  overworld-slot: 11
+  overworld-material: GRASS_BLOCK
+  nether-slot: 13
+  nether-material: NETHERRACK
+  end-slot: 15
+  end-material: END_STONE
+  locked-material: BARRIER
+  confirm-material: YELLOW_STAINED_GLASS_PANE
+  close-slot: 22

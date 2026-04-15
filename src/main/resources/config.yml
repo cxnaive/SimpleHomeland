@@ -21,6 +21,17 @@ homeland:
   end-unlock:
     money: 1000.0
     points: 0
+  # 重置世界费用（删除世界文件并重新生成）
+  reset:
+    overworld:
+      money: 500.0
+      points: 0
+    nether:
+      money: 300.0
+      points: 0
+    end:
+      money: 300.0
+      points: 0
   creation:
     # 阶梯费用：第1个、第2个、第3个... 超出列表取最后一档
     # 设为 0 表示免费

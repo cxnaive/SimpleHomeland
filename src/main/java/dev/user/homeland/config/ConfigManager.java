@@ -44,6 +44,12 @@ public class ConfigManager {
     private int netherUnlockPoints;
     private double endUnlockMoney;
     private int endUnlockPoints;
+    private double resetOverworldMoney;
+    private int resetOverworldPoints;
+    private double resetNetherMoney;
+    private int resetNetherPoints;
+    private double resetEndMoney;
+    private int resetEndPoints;
     private List<PriceTier> creationTiers;
     private List<ExpansionPriceTier> expansionTiers;
     private String worldSeed;
@@ -60,6 +66,7 @@ public class ConfigManager {
 
     // 游戏规则配置
     private List<GameRuleConfig> gameruleConfigs = new ArrayList<>();
+    private List<GameRuleConfig> enabledGameruleConfigs = new ArrayList<>();
 
     // GUI 布局配置
     private GUIConfig guiConfig;
@@ -95,6 +102,12 @@ public class ConfigManager {
         this.netherUnlockPoints = config.getInt("homeland.nether-unlock.points", 0);
         this.endUnlockMoney = config.getDouble("homeland.end-unlock.money", 1000.0);
         this.endUnlockPoints = config.getInt("homeland.end-unlock.points", 0);
+        this.resetOverworldMoney = config.getDouble("homeland.reset.overworld.money", 500.0);
+        this.resetOverworldPoints = config.getInt("homeland.reset.overworld.points", 0);
+        this.resetNetherMoney = config.getDouble("homeland.reset.nether.money", 300.0);
+        this.resetNetherPoints = config.getInt("homeland.reset.nether.points", 0);
+        this.resetEndMoney = config.getDouble("homeland.reset.end.money", 300.0);
+        this.resetEndPoints = config.getInt("homeland.reset.end.points", 0);
         // 创建费用阶梯
         List<?> creationTierList = config.getMapList("homeland.creation.tiers");
         if (creationTierList.isEmpty()) {
@@ -130,13 +143,21 @@ public class ConfigManager {
         // 游戏规则配置
         loadRulesConfig();
         gameruleConfigs.clear();
+        enabledGameruleConfigs.clear();
         ConfigurationSection grSection = rulesConfig.getConfigurationSection("gamerules");
         if (grSection != null) {
             for (String key : grSection.getKeys(false)) {
                 ConfigurationSection sec = grSection.getConfigurationSection(key);
-                if (sec != null && sec.getBoolean("enabled", false)) {
+                if (sec == null) continue;
+                boolean enabled = sec.getBoolean("enabled", false);
+                // 只要有 default-value 配置就创建对象（用于世界创建时设置）
+                if (sec.contains("default-value") || enabled) {
                     try {
-                        gameruleConfigs.add(new GameRuleConfig(key, sec));
+                        GameRuleConfig grc = new GameRuleConfig(key, sec);
+                        gameruleConfigs.add(grc);
+                        if (enabled) {
+                            enabledGameruleConfigs.add(grc);
+                        }
                     } catch (IllegalArgumentException e) {
                         plugin.getLogger().warning("未知的 GameRule: " + key + "，跳过");
                     }
@@ -237,6 +258,12 @@ public class ConfigManager {
     public int getNetherUnlockPoints() { return netherUnlockPoints; }
     public double getEndUnlockMoney() { return endUnlockMoney; }
     public int getEndUnlockPoints() { return endUnlockPoints; }
+    public double getResetOverworldMoney() { return resetOverworldMoney; }
+    public int getResetOverworldPoints() { return resetOverworldPoints; }
+    public double getResetNetherMoney() { return resetNetherMoney; }
+    public int getResetNetherPoints() { return resetNetherPoints; }
+    public double getResetEndMoney() { return resetEndMoney; }
+    public int getResetEndPoints() { return resetEndPoints; }
 
     public PriceTier getCreationCost(int currentCount) {
         if (creationTiers.isEmpty()) return new PriceTier(0, 0);
@@ -268,6 +295,10 @@ public class ConfigManager {
     public boolean isCommandBlockOwner() { return commandBlockOwner; }
 
     public List<GameRuleConfig> getEnabledGameruleConfigs() {
+        return Collections.unmodifiableList(enabledGameruleConfigs);
+    }
+
+    public List<GameRuleConfig> getAllGameruleConfigs() {
         return Collections.unmodifiableList(gameruleConfigs);
     }
 

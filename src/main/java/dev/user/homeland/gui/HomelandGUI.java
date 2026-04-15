@@ -16,6 +16,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 玩家家园列表 GUI
@@ -41,28 +42,42 @@ public class HomelandGUI extends AbstractGUI {
         ItemStack border = createBorderItem();
         fillBorder(border);
 
-        List<Homeland> homelands = plugin.getHomelandManager().getHomelands(player.getUniqueId());
+        UUID playerUuid = player.getUniqueId();
+        List<Homeland> ownHomelands = plugin.getHomelandManager().getHomelands(playerUuid);
+        List<Homeland> invitedHomelands = plugin.getHomelandManager().getInvitedHomelands(playerUuid);
         ConfigManager config = plugin.getConfigManager();
 
-        if (homelands.isEmpty()) {
+        // 合并列表：自己的家园 + 被邀请的家园
+        List<Homeland> allHomelands = new ArrayList<>(ownHomelands);
+        allHomelands.addAll(invitedHomelands);
+
+        if (allHomelands.isEmpty()) {
             setItem(cfg.getEmptySlot(), createEmptyItem());
         } else {
             int[] pageSlots = cfg.getPageSlots();
             int start = currentPage * cfg.getItemsPerPage();
             for (int i = 0; i < cfg.getItemsPerPage() && i < pageSlots.length; i++) {
                 int idx = start + i;
-                if (idx >= homelands.size()) break;
-                Homeland h = homelands.get(idx);
-                setItem(pageSlots[i], createHomelandItem(h), (p, e) -> {
-                    HomelandManageGUI.open(plugin, p, h.getName());
-                });
+                if (idx >= allHomelands.size()) break;
+                Homeland h = allHomelands.get(idx);
+                boolean isOwn = h.getOwnerUuid().equals(playerUuid);
+                if (isOwn) {
+                    setItem(pageSlots[i], createHomelandItem(h), (p, e) -> {
+                        HomelandManageGUI.open(plugin, p, h.getName());
+                    });
+                } else {
+                    setItem(pageSlots[i], createInvitedHomelandItem(h), (p, e) -> {
+                        close();
+                        plugin.getHomelandManager().teleportToHomeland(p, h.getOwnerUuid(), h.getName());
+                    });
+                }
             }
 
-            addPageButtons(homelands.size(), cfg.getItemsPerPage(), cfg.getPagePrevSlot(), cfg.getPageNextSlot());
+            addPageButtons(allHomelands.size(), cfg.getItemsPerPage(), cfg.getPagePrevSlot(), cfg.getPageNextSlot());
         }
 
         // 创建按钮（如果未达上限且有权限）
-        if (homelands.size() < config.getMaxHomelands()
+        if (ownHomelands.size() < config.getMaxHomelands()
                 && player.hasPermission("simplehomeland.homeland.create")) {
             setItem(cfg.getCreateSlot(), createCreateItem(), (p, e) -> {
                 close();
@@ -103,6 +118,28 @@ public class HomelandGUI extends AbstractGUI {
         lore.add(MessageUtil.guiLore(config.getMessage(h.isPublic() ? "gui.homeland-item-public" : "gui.homeland-item-private")));
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.homeland-item-click-manage")));
+
+        meta.lore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    @SuppressWarnings("deprecation")
+    private ItemStack createInvitedHomelandItem(Homeland h) {
+        ItemStack item = new ItemStack(cfg.getInvitedMaterial());
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        ConfigManager config = plugin.getConfigManager();
+        String ownerName = plugin.getServer().getOfflinePlayer(h.getOwnerUuid()).getName();
+        if (ownerName == null) ownerName = h.getOwnerUuid().toString().substring(0, 8);
+
+        meta.displayName(MessageUtil.guiName(config.getMessage("gui.invited-homeland-item-name",
+                "owner", ownerName, "name", h.getName())));
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.invited-homeland-item-lore")));
 
         meta.lore(lore);
         item.setItemMeta(meta);
