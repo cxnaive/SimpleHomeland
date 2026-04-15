@@ -105,7 +105,7 @@ create:
 gamerule:
   size: 54
   items-per-page: 28
-  content-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+  page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
   empty-slot: 22
   back-slot: 45
   prev-slot: 47
@@ -185,7 +185,7 @@ visitor:
 visitor-flag:
   size: 54
   items-per-page: 28
-  content-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+  page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
   empty-slot: 22
   prev-slot: 47
   page-info-slot: 49
@@ -197,7 +197,7 @@ visitor-flag:
 invite-manage:
   size: 54
   items-per-page: 28
-  content-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+  page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
   mode-slot: 4
   mode-online-material: LIME_STAINED_GLASS_PANE
   mode-invited-material: ORANGE_STAINED_GLASS_PANE

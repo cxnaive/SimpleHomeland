@@ -369,89 +369,100 @@ public class HomelandManager {
             }
 
                 level.createAsync().thenAccept(overworld -> {
-                    // 在世界 (0,0) chunk 的 region thread 上执行 chunk 相关操作
+                    // 先在 region thread 上获取 spawn Y（需要 chunk 访问）
                     Bukkit.getRegionScheduler().execute(plugin, overworld, 0, 0, () -> {
-                        try {
-                            // 设置出生点：void 固定在起始岛上，其他类型在 (0,0) 附近
-                            if ("void".equals(worldTypeKey)) {
-                                overworld.setSpawnLocation(8, 63, 8);
-                            } else {
-                                int safeY = overworld.getHighestBlockYAt(0, 0) + 1;
-                                overworld.setSpawnLocation(0, Math.max(safeY, 1), 0);
-                            }
+                        ConfigManager cfg = plugin.getConfigManager();
+                        final int spawnY;
+                        if ("void".equals(worldTypeKey)) {
+                            spawnY = cfg.getSpawnYVoid();
+                        } else if ("flat".equals(worldTypeKey)) {
+                            spawnY = cfg.getSpawnYFlat();
+                        } else {
+                            spawnY = overworld.getHighestBlockYAt(0, 0) + 1;
+                        }
+                        // 跳回 global region thread 执行 server settings 操作
+                        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                            try {
+                                // 设置出生点：void 固定在起始岛上，其他类型在 (0,0) 附近
+                                if ("void".equals(worldTypeKey)) {
+                                    overworld.setSpawnLocation(8, spawnY, 8);
+                                } else {
+                                    overworld.setSpawnLocation(0, spawnY, 0);
+                                }
 
-                            // 设置 WorldBorder
-                            overworld.getWorldBorder().setCenter(0, 0);
-                            overworld.getWorldBorder().setSize(borderRadius * 2);
+                                // 设置 WorldBorder
+                                overworld.getWorldBorder().setCenter(0, 0);
+                                overworld.getWorldBorder().setSize(borderRadius * 2);
 
-                            // 设置自动加载
-                            provider.levelView().setEnabled(overworld, true);
-                            overworld.setAutoSave(true);
-                            touchLastPlayerTime(worldKey);
+                                // 设置自动加载
+                                provider.levelView().setEnabled(overworld, true);
+                                overworld.setAutoSave(true);
+                                touchLastPlayerTime(worldKey);
 
-                            // 应用默认游戏规则
-                            applyDefaultGamerules(overworld);
+                                // 应用默认游戏规则
+                                applyDefaultGamerules(overworld);
 
-                            // 写入数据库
-                            java.util.UUID worldUuid = overworld.getUID();
-                            plugin.getDatabaseQueue().submit("create-homeland", conn -> {
-                                try (PreparedStatement stmt = conn.prepareStatement(
-                                        "INSERT INTO homeland (owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, world_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                        PreparedStatement.RETURN_GENERATED_KEYS)) {
-                                    stmt.setString(1, ownerUuid.toString());
-                                    stmt.setString(2, name);
-                                    stmt.setString(3, worldKey);
-                                    stmt.setString(4, worldUuid.toString());
-                                    stmt.setInt(5, borderRadius);
-                                    stmt.setBoolean(6, false);
-                                    stmt.setBoolean(7, false);
-                                    stmt.setBoolean(8, false);
-                                    stmt.setString(9, new VisitorFlags().toJson());
-                                    stmt.setString(10, worldTypeKey);
-                                    stmt.executeUpdate();
+                                // 写入数据库
+                                java.util.UUID worldUuid = overworld.getUID();
+                                plugin.getDatabaseQueue().submit("create-homeland", conn -> {
+                                    try (PreparedStatement stmt = conn.prepareStatement(
+                                            "INSERT INTO homeland (owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, world_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                            PreparedStatement.RETURN_GENERATED_KEYS)) {
+                                        stmt.setString(1, ownerUuid.toString());
+                                        stmt.setString(2, name);
+                                        stmt.setString(3, worldKey);
+                                        stmt.setString(4, worldUuid.toString());
+                                        stmt.setInt(5, borderRadius);
+                                        stmt.setBoolean(6, false);
+                                        stmt.setBoolean(7, false);
+                                        stmt.setBoolean(8, false);
+                                        stmt.setString(9, new VisitorFlags().toJson());
+                                        stmt.setString(10, worldTypeKey);
+                                        stmt.executeUpdate();
 
-                                    try (ResultSet rs = stmt.getGeneratedKeys()) {
-                                        if (rs.next()) {
-                                            int id = rs.getInt(1);
-                                            Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, worldUuid, worldTypeKey, borderRadius, false, false, false, new VisitorFlags());
-                                            homelandCache.computeIfAbsent(ownerUuid, k -> new CopyOnWriteArrayList<>()).add(homeland);
-                                            indexHomeland(homeland);
+                                        try (ResultSet rs = stmt.getGeneratedKeys()) {
+                                            if (rs.next()) {
+                                                int id = rs.getInt(1);
+                                                Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, worldUuid, worldTypeKey, borderRadius, false, false, false, new VisitorFlags());
+                                                homelandCache.computeIfAbsent(ownerUuid, k -> new CopyOnWriteArrayList<>()).add(homeland);
+                                                indexHomeland(homeland);
+                                            }
                                         }
                                     }
-                                }
-                                return null;
-                            }, result -> {
-                                sendAsyncMessage(messageTarget, config.getMessage("homeland-created", "name", name));
-                                // 传送到家园（仅玩家自己创建时传送）
-                                if (!skipEconomy && messageTarget instanceof Player ownerPlayer && ownerPlayer.isOnline()) {
-                                    ownerPlayer.getScheduler().execute(plugin, () -> {
-                                        Location spawn = overworld.getSpawnLocation();
-                                        ownerPlayer.teleportAsync(spawn);
-                                    }, () -> {}, 1L);
-                                }
-                                lockedOnSuccess.run();
-                            }, error -> {
-                                if (isUniqueConstraintViolation(error)) {
-                                    sendAsyncMessage(messageTarget, config.getMessage("homeland-name-exists", "name", name));
-                                } else {
-                                    plugin.getLogger().warning("创建家园数据库记录失败: " + error.getMessage());
-                                    sendAsyncMessage(messageTarget, config.getMessage("create-failed-db"));
-                                }
-                                // 尝试清理已创建的世界
-                                try {
-                                    plugin.getWorldsProvider().levelView().deleteAsync(overworld, true);
-                                } catch (Exception ex) {
-                                    plugin.getLogger().warning("清理失败的世界失败: " + ex.getMessage());
-                                }
+                                    return null;
+                                }, result -> {
+                                    sendAsyncMessage(messageTarget, config.getMessage("homeland-created", "name", name));
+                                    // 传送到家园（仅玩家自己创建时传送）
+                                    if (!skipEconomy && messageTarget instanceof Player ownerPlayer && ownerPlayer.isOnline()) {
+                                        ownerPlayer.getScheduler().execute(plugin, () -> {
+                                            Location spawn = overworld.getSpawnLocation();
+                                            ownerPlayer.teleportAsync(spawn);
+                                        }, () -> {}, 1L);
+                                    }
+                                    lockedOnSuccess.run();
+                                }, error -> {
+                                    if (isUniqueConstraintViolation(error)) {
+                                        sendAsyncMessage(messageTarget, config.getMessage("homeland-name-exists", "name", name));
+                                    } else {
+                                        plugin.getLogger().warning("创建家园数据库记录失败: " + error.getMessage());
+                                        sendAsyncMessage(messageTarget, config.getMessage("create-failed-db"));
+                                    }
+                                    // 尝试清理已创建的世界
+                                    try {
+                                        plugin.getWorldsProvider().levelView().deleteAsync(overworld, true);
+                                    } catch (Exception ex) {
+                                        plugin.getLogger().warning("清理失败的世界失败: " + ex.getMessage());
+                                    }
+                                    refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
+                                    lockedOnFailure.run();
+                                });
+                            } catch (Exception e) {
+                                plugin.getLogger().severe("创建家园后续处理失败: " + e.getMessage());
                                 refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
+                                sendAsyncMessage(messageTarget, config.getMessage("create-failed"));
                                 lockedOnFailure.run();
-                            });
-                        } catch (Exception e) {
-                            plugin.getLogger().severe("创建家园后续处理失败: " + e.getMessage());
-                            refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
-                            sendAsyncMessage(messageTarget, config.getMessage("create-failed"));
-                            lockedOnFailure.run();
-                        }
+                            }
+                        });
                     });
                 }).exceptionally(throwable -> {
                     plugin.getLogger().log(java.util.logging.Level.SEVERE, "创建家园世界失败: " + throwable.getMessage(), throwable);
@@ -516,20 +527,24 @@ public class HomelandManager {
                 java.util.Set<World> worldsToDelete = new java.util.LinkedHashSet<>();
                 java.util.Set<World> worldsToTeleport = new java.util.LinkedHashSet<>();
 
+                LinkProvider linker = provider.linkProvider();
+
                 World overworld = getHomelandWorld(homeland.getWorldKey());
                 if (overworld != null) {
                     worldsToDelete.add(overworld);
                     worldsToTeleport.add(overworld);
 
-                    LinkProvider linker = provider.linkProvider();
+                    // 先解绑传送门 link
                     Optional<net.thenextlvl.worlds.api.link.LinkTree> treeOpt = linker.getLinkTree(overworld);
                     if (treeOpt.isPresent()) {
                         net.thenextlvl.worlds.api.link.LinkTree tree = treeOpt.get();
                         tree.getNether().ifPresent(n -> {
+                            linker.unlink(overworld, n);
                             worldsToDelete.add(n);
                             worldsToTeleport.add(n);
                         });
                         tree.getEnd().ifPresent(e -> {
+                            linker.unlink(overworld, e);
                             worldsToDelete.add(e);
                             worldsToTeleport.add(e);
                         });
@@ -540,6 +555,7 @@ public class HomelandManager {
                 if (homeland.hasNether()) {
                     World nether = getHomelandWorld(homeland.getWorldKey() + "_nether");
                     if (nether != null) {
+                        if (overworld != null) linker.unlink(overworld, nether);
                         worldsToDelete.add(nether);
                         worldsToTeleport.add(nether);
                     }
@@ -547,6 +563,7 @@ public class HomelandManager {
                 if (homeland.hasEnd()) {
                     World end = getHomelandWorld(homeland.getWorldKey() + "_the_end");
                     if (end != null) {
+                        if (overworld != null) linker.unlink(overworld, end);
                         worldsToDelete.add(end);
                         worldsToTeleport.add(end);
                     }
@@ -558,6 +575,8 @@ public class HomelandManager {
                     for (Player p : w.getPlayers()) {
                         p.getScheduler().execute(plugin, () -> p.teleportAsync(mainWorld.getSpawnLocation()), null, 1L);
                     }
+                    // 禁用世界自动加载
+                    provider.levelView().setEnabled(w, false);
                 }
 
                 // 先删除数据库记录
@@ -577,7 +596,7 @@ public class HomelandManager {
                     sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage(successMsgKey, "name", homeland.getName()));
                     onSuccess.run();
 
-                    // DB删除成功后删除世界文件
+                    // DB删除成功后立即删除世界文件
                     if (!worldsToDelete.isEmpty()) {
                         java.util.Set<World> worldsCopy = new java.util.LinkedHashSet<>(worldsToDelete);
                         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
@@ -586,6 +605,8 @@ public class HomelandManager {
                                     provider.levelView().deleteAsync(w, false).thenAccept(deletionResult -> {
                                         if (!deletionResult.isSuccess()) {
                                             plugin.getLogger().warning("删除世界失败: " + w.getName() + " - " + deletionResult);
+                                        } else {
+                                            plugin.getLogger().info("已删除世界: " + w.getName());
                                         }
                                     }).exceptionally(throwable -> {
                                         plugin.getLogger().warning("删除世界异常: " + w.getName() + " - " + throwable.getMessage());
@@ -595,7 +616,7 @@ public class HomelandManager {
                                     plugin.getLogger().warning("删除世界失败: " + w.getName() + " - " + e.getMessage());
                                 }
                             }
-                        }, 40L);
+                        }, 60L); // 等待3秒让传送完成
                     }
                 }, error -> {
                     plugin.getLogger().warning("删除家园数据库记录失败: " + error.getMessage());
@@ -1516,70 +1537,81 @@ public class HomelandManager {
 
             Level level = builder.build();
             level.createAsync().thenAccept(newOverworld -> {
-                // 在世界 (0,0) chunk 的 region thread 上执行 chunk 相关操作
+                // 先在 region thread 上获取 spawn Y（需要 chunk 访问）
                 Bukkit.getRegionScheduler().execute(plugin, newOverworld, 0, 0, () -> {
-                    try {
-                        // 设置出生点：所有类型都设在 (0,0) 附近确保在 border 内
-                        if ("void".equals(worldTypeKey)) {
-                            newOverworld.setSpawnLocation(8, 63, 8);
-                        } else {
-                            int safeY = newOverworld.getHighestBlockYAt(0, 0) + 1;
-                            newOverworld.setSpawnLocation(0, Math.max(safeY, 1), 0);
-                        }
-
-                        // 设置边界
-                        int radius = homeland.getBorderRadius();
-                        newOverworld.getWorldBorder().setCenter(0, 0);
-                        newOverworld.getWorldBorder().setSize(radius * 2);
-
-                        provider.levelView().setEnabled(newOverworld, true);
-                        newOverworld.setAutoSave(true);
-                        touchLastPlayerTime(homeland.getWorldKey());
-
-                        // 应用默认游戏规则
-                        applyDefaultGamerules(newOverworld);
-
-                        // 重新关联维度传送门
-                        LinkProvider linker = provider.linkProvider();
-                        if (netherWorld != null) {
-                            linker.link(newOverworld, netherWorld);
-                        }
-                        if (endWorld != null) {
-                            linker.link(newOverworld, endWorld);
-                        }
-
-                        // 更新 DB: world_uuid 和 world_type
-                        java.util.UUID newWorldUuid = newOverworld.getUID();
-                        plugin.getDatabaseQueue().submit("reset-overworld", conn -> {
-                            try (PreparedStatement stmt = conn.prepareStatement(
-                                    "UPDATE homeland SET world_uuid = ?, world_type = ? WHERE id = ?")) {
-                                stmt.setString(1, newWorldUuid.toString());
-                                stmt.setString(2, worldTypeKey);
-                                stmt.setInt(3, homeland.getId());
-                                stmt.executeUpdate();
+                    ConfigManager cfg = plugin.getConfigManager();
+                    final int spawnY;
+                    if ("void".equals(worldTypeKey)) {
+                        spawnY = cfg.getSpawnYVoid();
+                    } else if ("flat".equals(worldTypeKey)) {
+                        spawnY = cfg.getSpawnYFlat();
+                    } else {
+                        spawnY = newOverworld.getHighestBlockYAt(0, 0) + 1;
+                    }
+                    // 跳回 global region thread 执行 server settings 操作
+                    Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                        try {
+                            // 设置出生点：所有类型都设在 (0,0) 附近确保在 border 内
+                            if ("void".equals(worldTypeKey)) {
+                                newOverworld.setSpawnLocation(8, spawnY, 8);
+                            } else {
+                                newOverworld.setSpawnLocation(0, spawnY, 0);
                             }
-                            return null;
-                        }, result -> {
-                            // 更新内存
-                            if (homeland.getWorldUuid() != null) {
-                                worldUuidIndex.remove(homeland.getWorldUuid());
-                            }
-                            homeland.setWorldUuid(newWorldUuid);
-                            homeland.setWorldType(worldTypeKey);
-                            worldUuidIndex.put(newWorldUuid, homeland);
 
-                            sendAsyncMessage(messageTarget, config.getMessage("reset-overworld-success", "name", homeland.getName()));
-                            onSuccess.run();
-                        }, error -> {
-                            plugin.getLogger().warning("重置世界数据库更新失败: " + error.getMessage());
+                            // 设置边界
+                            int radius = homeland.getBorderRadius();
+                            newOverworld.getWorldBorder().setCenter(0, 0);
+                            newOverworld.getWorldBorder().setSize(radius * 2);
+
+                            provider.levelView().setEnabled(newOverworld, true);
+                            newOverworld.setAutoSave(true);
+                            touchLastPlayerTime(homeland.getWorldKey());
+
+                            // 应用默认游戏规则
+                            applyDefaultGamerules(newOverworld);
+
+                            // 重新关联维度传送门
+                            LinkProvider linker = provider.linkProvider();
+                            if (netherWorld != null) {
+                                linker.link(newOverworld, netherWorld);
+                            }
+                            if (endWorld != null) {
+                                linker.link(newOverworld, endWorld);
+                            }
+
+                            // 更新 DB: world_uuid 和 world_type
+                            java.util.UUID newWorldUuid = newOverworld.getUID();
+                            plugin.getDatabaseQueue().submit("reset-overworld", conn -> {
+                                try (PreparedStatement stmt = conn.prepareStatement(
+                                        "UPDATE homeland SET world_uuid = ?, world_type = ? WHERE id = ?")) {
+                                    stmt.setString(1, newWorldUuid.toString());
+                                    stmt.setString(2, worldTypeKey);
+                                    stmt.setInt(3, homeland.getId());
+                                    stmt.executeUpdate();
+                                }
+                                return null;
+                            }, result -> {
+                                // 更新内存
+                                if (homeland.getWorldUuid() != null) {
+                                    worldUuidIndex.remove(homeland.getWorldUuid());
+                                }
+                                homeland.setWorldUuid(newWorldUuid);
+                                homeland.setWorldType(worldTypeKey);
+                                worldUuidIndex.put(newWorldUuid, homeland);
+
+                                sendAsyncMessage(messageTarget, config.getMessage("reset-overworld-success", "name", homeland.getName()));
+                                onSuccess.run();
+                            }, error -> {
+                                plugin.getLogger().warning("重置世界数据库更新失败: " + error.getMessage());
+                                sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
+                                onFailure.run();
+                            });
+                        } catch (Exception e) {
+                            plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + e.getMessage(), e);
                             sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
                             onFailure.run();
-                        });
-                    } catch (Exception e) {
-                        plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + e.getMessage(), e);
-                        sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
-                        onFailure.run();
-                    }
+                        }
+                    });
                 });
             }).exceptionally(throwable -> {
                 plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + throwable.getMessage(), throwable);
@@ -1653,69 +1685,80 @@ public class HomelandManager {
             Level level = builder.build();
             return level.createAsync();
         }).thenAccept(newOverworld -> {
-            // 在世界 (0,0) chunk 的 region thread 上执行 chunk 相关操作
+            // 先在 region thread 上获取 spawn Y（需要 chunk 访问）
             Bukkit.getRegionScheduler().execute(plugin, newOverworld, 0, 0, () -> {
-                try {
-                    // 设置出生点：所有类型都设在 (0,0) 附近确保在 border 内
-                    if ("void".equals(worldTypeKey)) {
-                        newOverworld.setSpawnLocation(8, 63, 8);
-                    } else {
-                        int safeY = newOverworld.getHighestBlockYAt(0, 0) + 1;
-                        newOverworld.setSpawnLocation(0, Math.max(safeY, 1), 0);
-                    }
-
-                    // 设置边界
-                    int radius = homeland.getBorderRadius();
-                    newOverworld.getWorldBorder().setCenter(0, 0);
-                    newOverworld.getWorldBorder().setSize(radius * 2);
-
-                    provider.levelView().setEnabled(newOverworld, true);
-                    newOverworld.setAutoSave(true);
-                    touchLastPlayerTime(homeland.getWorldKey());
-
-                    // 应用默认游戏规则
-                    applyDefaultGamerules(newOverworld);
-
-                    // 重新关联维度传送门
-                    if (netherWorld != null) {
-                        linker.link(newOverworld, netherWorld);
-                    }
-                    if (endWorld != null) {
-                        linker.link(newOverworld, endWorld);
-                    }
-
-                    // 更新 DB: world_uuid 和 world_type
-                    java.util.UUID newWorldUuid = newOverworld.getUID();
-                    plugin.getDatabaseQueue().submit("reset-overworld", conn -> {
-                        try (PreparedStatement stmt = conn.prepareStatement(
-                                "UPDATE homeland SET world_uuid = ?, world_type = ? WHERE id = ?")) {
-                            stmt.setString(1, newWorldUuid.toString());
-                            stmt.setString(2, worldTypeKey);
-                            stmt.setInt(3, homeland.getId());
-                            stmt.executeUpdate();
+                ConfigManager cfg = plugin.getConfigManager();
+                final int spawnY;
+                if ("void".equals(worldTypeKey)) {
+                    spawnY = cfg.getSpawnYVoid();
+                } else if ("flat".equals(worldTypeKey)) {
+                    spawnY = cfg.getSpawnYFlat();
+                } else {
+                    spawnY = newOverworld.getHighestBlockYAt(0, 0) + 1;
+                }
+                // 跳回 global region thread 执行 server settings 操作
+                Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                    try {
+                        // 设置出生点：所有类型都设在 (0,0) 附近确保在 border 内
+                        if ("void".equals(worldTypeKey)) {
+                            newOverworld.setSpawnLocation(8, spawnY, 8);
+                        } else {
+                            newOverworld.setSpawnLocation(0, spawnY, 0);
                         }
-                        return null;
-                    }, result -> {
-                        // 更新内存
-                        if (homeland.getWorldUuid() != null) {
-                            worldUuidIndex.remove(homeland.getWorldUuid());
-                        }
-                        homeland.setWorldUuid(newWorldUuid);
-                        homeland.setWorldType(worldTypeKey);
-                        worldUuidIndex.put(newWorldUuid, homeland);
 
-                        sendAsyncMessage(messageTarget, config.getMessage("reset-overworld-success", "name", homeland.getName()));
-                        onSuccess.run();
-                    }, error -> {
-                        plugin.getLogger().warning("重置世界数据库更新失败: " + error.getMessage());
+                        // 设置边界
+                        int radius = homeland.getBorderRadius();
+                        newOverworld.getWorldBorder().setCenter(0, 0);
+                        newOverworld.getWorldBorder().setSize(radius * 2);
+
+                        provider.levelView().setEnabled(newOverworld, true);
+                        newOverworld.setAutoSave(true);
+                        touchLastPlayerTime(homeland.getWorldKey());
+
+                        // 应用默认游戏规则
+                        applyDefaultGamerules(newOverworld);
+
+                        // 重新关联维度传送门
+                        if (netherWorld != null) {
+                            linker.link(newOverworld, netherWorld);
+                        }
+                        if (endWorld != null) {
+                            linker.link(newOverworld, endWorld);
+                        }
+
+                        // 更新 DB: world_uuid 和 world_type
+                        java.util.UUID newWorldUuid = newOverworld.getUID();
+                        plugin.getDatabaseQueue().submit("reset-overworld", conn -> {
+                            try (PreparedStatement stmt = conn.prepareStatement(
+                                    "UPDATE homeland SET world_uuid = ?, world_type = ? WHERE id = ?")) {
+                                stmt.setString(1, newWorldUuid.toString());
+                                stmt.setString(2, worldTypeKey);
+                                stmt.setInt(3, homeland.getId());
+                                stmt.executeUpdate();
+                            }
+                            return null;
+                        }, result -> {
+                            // 更新内存
+                            if (homeland.getWorldUuid() != null) {
+                                worldUuidIndex.remove(homeland.getWorldUuid());
+                            }
+                            homeland.setWorldUuid(newWorldUuid);
+                            homeland.setWorldType(worldTypeKey);
+                            worldUuidIndex.put(newWorldUuid, homeland);
+
+                            sendAsyncMessage(messageTarget, config.getMessage("reset-overworld-success", "name", homeland.getName()));
+                            onSuccess.run();
+                        }, error -> {
+                            plugin.getLogger().warning("重置世界数据库更新失败: " + error.getMessage());
+                            sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
+                            onFailure.run();
+                        });
+                    } catch (Exception e) {
+                        plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + e.getMessage(), e);
                         sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
                         onFailure.run();
-                    });
-                } catch (Exception e) {
-                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + e.getMessage(), e);
-                    sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
-                    onFailure.run();
-                }
+                    }
+                });
             });
         }).exceptionally(throwable -> {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + throwable.getMessage(), throwable);

@@ -177,13 +177,13 @@ public class HomelandInviteManageGUI extends AbstractGUI {
             return;
         }
 
-        int[] contentSlots = cfg.getContentSlots();
+        int[] pageSlots = cfg.getPageSlots();
         int start = currentPage * cfg.getItemsPerPage();
-        for (int i = 0; i < cfg.getItemsPerPage() && i < contentSlots.length; i++) {
+        for (int i = 0; i < cfg.getItemsPerPage() && i < pageSlots.length; i++) {
             int idx = start + i;
             if (idx >= available.size()) break;
             Player target = available.get(idx);
-            setItem(contentSlots[i], createOnlinePlayerItem(target), (p, e) -> {
+            setItem(pageSlots[i], createOnlinePlayerItem(target), (p, e) -> {
                 if (isAdmin) {
                     plugin.getHomelandManager().invitePlayerAdmin(p, targetUuid, homelandName,
                             target.getUniqueId(), target.getName(),
@@ -224,15 +224,15 @@ public class HomelandInviteManageGUI extends AbstractGUI {
         }
 
         List<Map.Entry<UUID, String>> entries = new ArrayList<>(invitedPlayers.entrySet());
-        int[] contentSlots = cfg.getContentSlots();
+        int[] pageSlots = cfg.getPageSlots();
         int start = currentPage * cfg.getItemsPerPage();
-        for (int i = 0; i < cfg.getItemsPerPage() && i < contentSlots.length; i++) {
+        for (int i = 0; i < cfg.getItemsPerPage() && i < pageSlots.length; i++) {
             int idx = start + i;
             if (idx >= entries.size()) break;
             Map.Entry<UUID, String> entry = entries.get(idx);
             UUID uuid = entry.getKey();
             String name = entry.getValue();
-            setItem(contentSlots[i], createInvitedPlayerItem(uuid, name), (p, e) -> {
+            setItem(pageSlots[i], createInvitedPlayerItem(uuid, name), (p, e) -> {
                 if (isAdmin) {
                     plugin.getHomelandManager().uninvitePlayerAdmin(p, targetUuid, homelandName, uuid, name,
                             () -> {

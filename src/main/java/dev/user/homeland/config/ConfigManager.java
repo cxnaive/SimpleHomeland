@@ -55,6 +55,9 @@ public class ConfigManager {
     private String worldSeed;
     private boolean worldStructures;
     private boolean worldBonusChest;
+    private int spawnYDefault;
+    private int spawnYVoid;
+    private int spawnYFlat;
     private String defaultWorldType;
     private int autoUnloadSeconds;
     private boolean preloadWorlds;
@@ -130,6 +133,9 @@ public class ConfigManager {
         this.worldSeed = config.getString("homeland.world.seed", "");
         this.worldStructures = config.getBoolean("homeland.world.structures", true);
         this.worldBonusChest = config.getBoolean("homeland.world.bonus-chest", false);
+        this.spawnYDefault = config.getInt("homeland.world.spawn-y.default", -60);
+        this.spawnYVoid = config.getInt("homeland.world.spawn-y.void", 63);
+        this.spawnYFlat = config.getInt("homeland.world.spawn-y.flat", -60);
         this.defaultWorldType = config.getString("homeland.world-type", "default");
         this.autoUnloadSeconds = config.getInt("homeland.auto-unload-seconds", 600);
         this.preloadWorlds = config.getBoolean("homeland.preload-worlds", false);
@@ -286,6 +292,9 @@ public class ConfigManager {
     public String getWorldSeed() { return worldSeed; }
     public boolean isWorldStructures() { return worldStructures; }
     public boolean isWorldBonusChest() { return worldBonusChest; }
+    public int getSpawnYDefault() { return spawnYDefault; }
+    public int getSpawnYVoid() { return spawnYVoid; }
+    public int getSpawnYFlat() { return spawnYFlat; }
     public String getDefaultWorldType() { return defaultWorldType; }
     public int getAutoUnloadSeconds() { return autoUnloadSeconds; }
     public boolean isPreloadWorlds() { return preloadWorlds; }

@@ -304,7 +304,7 @@ public class GUIConfig {
     public static class GameRule {
         private final int size;
         private final int itemsPerPage;
-        private final int[] contentSlots;
+        private final int[] pageSlots;
         private final int emptySlot;
         private final int backSlot;
         private final int prevSlot;
@@ -315,7 +315,7 @@ public class GUIConfig {
         public GameRule(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
             this.itemsPerPage = sec.getInt("items-per-page", 28);
-            this.contentSlots = parseIntArray(sec, "content-slots",
+            this.pageSlots = parseIntArray(sec, "page-slots",
                     new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
             this.emptySlot = sec.getInt("empty-slot", 22);
             this.backSlot = sec.getInt("back-slot", 45);
@@ -327,7 +327,7 @@ public class GUIConfig {
 
         public int getSize() { return size; }
         public int getItemsPerPage() { return itemsPerPage; }
-        public int[] getContentSlots() { return contentSlots; }
+        public int[] getPageSlots() { return pageSlots; }
         public int getEmptySlot() { return emptySlot; }
         public int getBackSlot() { return backSlot; }
         public int getPrevSlot() { return prevSlot; }
@@ -525,7 +525,7 @@ public class GUIConfig {
     public static class VisitorFlag {
         private final int size;
         private final int itemsPerPage;
-        private final int[] contentSlots;
+        private final int[] pageSlots;
         private final int emptySlot;
         private final int prevSlot;
         private final int pageInfoSlot;
@@ -536,7 +536,7 @@ public class GUIConfig {
         public VisitorFlag(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
             this.itemsPerPage = sec.getInt("items-per-page", 28);
-            this.contentSlots = parseIntArray(sec, "content-slots",
+            this.pageSlots = parseIntArray(sec, "page-slots",
                     new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
             this.emptySlot = sec.getInt("empty-slot", 22);
             this.prevSlot = sec.getInt("prev-slot", 47);
@@ -548,7 +548,7 @@ public class GUIConfig {
 
         public int getSize() { return size; }
         public int getItemsPerPage() { return itemsPerPage; }
-        public int[] getContentSlots() { return contentSlots; }
+        public int[] getPageSlots() { return pageSlots; }
         public int getEmptySlot() { return emptySlot; }
         public int getPrevSlot() { return prevSlot; }
         public int getPageInfoSlot() { return pageInfoSlot; }
@@ -562,7 +562,7 @@ public class GUIConfig {
     public static class InviteManage {
         private final int size;
         private final int itemsPerPage;
-        private final int[] contentSlots;
+        private final int[] pageSlots;
         private final int modeSlot;
         private final Material modeOnlineMaterial;
         private final Material modeInvitedMaterial;
@@ -577,7 +577,7 @@ public class GUIConfig {
         public InviteManage(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
             this.itemsPerPage = sec.getInt("items-per-page", 28);
-            this.contentSlots = parseIntArray(sec, "content-slots",
+            this.pageSlots = parseIntArray(sec, "page-slots",
                     new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
             this.modeSlot = sec.getInt("mode-slot", 4);
             this.modeOnlineMaterial = parseMaterial(sec, "mode-online-material", "LIME_STAINED_GLASS_PANE");
@@ -593,7 +593,7 @@ public class GUIConfig {
 
         public int getSize() { return size; }
         public int getItemsPerPage() { return itemsPerPage; }
-        public int[] getContentSlots() { return contentSlots; }
+        public int[] getPageSlots() { return pageSlots; }
         public int getModeSlot() { return modeSlot; }
         public Material getModeOnlineMaterial() { return modeOnlineMaterial; }
         public Material getModeInvitedMaterial() { return modeInvitedMaterial; }

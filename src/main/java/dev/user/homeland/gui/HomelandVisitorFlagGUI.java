@@ -115,16 +115,16 @@ public class HomelandVisitorFlagGUI extends AbstractGUI {
         fillBorder(border);
 
         VisitorFlag[] flagValues = VisitorFlag.values();
-        int[] contentSlots = cfg.getContentSlots();
+        int[] pageSlots = cfg.getPageSlots();
         int start = currentPage * cfg.getItemsPerPage();
 
-        for (int i = 0; i < cfg.getItemsPerPage() && i < contentSlots.length; i++) {
+        for (int i = 0; i < cfg.getItemsPerPage() && i < pageSlots.length; i++) {
             int idx = start + i;
             if (idx >= flagValues.length) break;
 
             VisitorFlag flag = flagValues[idx];
             boolean value = flags.get(flag);
-            setItem(contentSlots[i], createFlagItem(flag, value), (p, e) -> {
+            setItem(pageSlots[i], createFlagItem(flag, value), (p, e) -> {
                 onSave.accept(flag, !value);
             });
         }

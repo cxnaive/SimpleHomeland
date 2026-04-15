@@ -90,15 +90,15 @@ public class HomelandGameRuleGUI extends AbstractGUI {
         if (overworld == null || gamerules.isEmpty()) {
             setItem(cfg.getEmptySlot(), createEmptyItem(gamerules.isEmpty()), null);
         } else {
-            int[] contentSlots = cfg.getContentSlots();
+            int[] pageSlots = cfg.getPageSlots();
             int start = currentPage * cfg.getItemsPerPage();
-            for (int i = 0; i < cfg.getItemsPerPage() && i < contentSlots.length; i++) {
+            for (int i = 0; i < cfg.getItemsPerPage() && i < pageSlots.length; i++) {
                 int idx = start + i;
                 if (idx >= gamerules.size()) break;
 
                 GameRuleConfig grc = gamerules.get(idx);
                 String currentValue = getGameruleValue(overworld, grc);
-                setItem(contentSlots[i], createGameruleItem(grc, currentValue), (p, e) -> {
+                setItem(pageSlots[i], createGameruleItem(grc, currentValue), (p, e) -> {
                     handleClick(grc, currentValue, p, e);
                 });
             }
