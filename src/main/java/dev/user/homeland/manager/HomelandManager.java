@@ -369,86 +369,90 @@ public class HomelandManager {
             }
 
                 level.createAsync().thenAccept(overworld -> {
-                    try {
-                        // 空岛类型设置出生点到起始岛上
-                        if ("void".equals(worldTypeKey)) {
-                            overworld.setSpawnLocation(8, 63, 8);
-                        }
+                    // 在世界 (0,0) chunk 的 region thread 上执行 chunk 相关操作
+                    Bukkit.getRegionScheduler().execute(plugin, overworld, 0, 0, () -> {
+                        try {
+                            // 设置出生点：void 固定在起始岛上，其他类型在 (0,0) 附近
+                            if ("void".equals(worldTypeKey)) {
+                                overworld.setSpawnLocation(8, 63, 8);
+                            } else {
+                                int safeY = overworld.getHighestBlockYAt(0, 0) + 1;
+                                overworld.setSpawnLocation(0, Math.max(safeY, 1), 0);
+                            }
 
-                        // 设置 WorldBorder（需在全局区域线程执行）
-                        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                            // 设置 WorldBorder
                             overworld.getWorldBorder().setCenter(0, 0);
                             overworld.getWorldBorder().setSize(borderRadius * 2);
-                        });
 
-                        // 设置自动加载
-                        provider.levelView().setEnabled(overworld, true);
-                        overworld.setAutoSave(true);
-                        touchLastPlayerTime(worldKey);
+                            // 设置自动加载
+                            provider.levelView().setEnabled(overworld, true);
+                            overworld.setAutoSave(true);
+                            touchLastPlayerTime(worldKey);
 
-                        // 应用默认游戏规则
-                        applyDefaultGamerules(overworld);
+                            // 应用默认游戏规则
+                            applyDefaultGamerules(overworld);
 
-                        // 写入数据库
-                        java.util.UUID worldUuid = overworld.getUID();
-                        plugin.getDatabaseQueue().submit("create-homeland", conn -> {
-                            try (PreparedStatement stmt = conn.prepareStatement(
-                                    "INSERT INTO homeland (owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, world_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                    PreparedStatement.RETURN_GENERATED_KEYS)) {
-                                stmt.setString(1, ownerUuid.toString());
-                                stmt.setString(2, name);
-                                stmt.setString(3, worldKey);
-                                stmt.setString(4, worldUuid.toString());
-                                stmt.setInt(5, borderRadius);
-                                stmt.setBoolean(6, false);
-                                stmt.setBoolean(7, false);
-                                stmt.setBoolean(8, false);
-                                stmt.setString(9, new VisitorFlags().toJson());
-                                stmt.setString(10, worldTypeKey);
-                                stmt.executeUpdate();
+                            // 写入数据库
+                            java.util.UUID worldUuid = overworld.getUID();
+                            plugin.getDatabaseQueue().submit("create-homeland", conn -> {
+                                try (PreparedStatement stmt = conn.prepareStatement(
+                                        "INSERT INTO homeland (owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, world_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                        PreparedStatement.RETURN_GENERATED_KEYS)) {
+                                    stmt.setString(1, ownerUuid.toString());
+                                    stmt.setString(2, name);
+                                    stmt.setString(3, worldKey);
+                                    stmt.setString(4, worldUuid.toString());
+                                    stmt.setInt(5, borderRadius);
+                                    stmt.setBoolean(6, false);
+                                    stmt.setBoolean(7, false);
+                                    stmt.setBoolean(8, false);
+                                    stmt.setString(9, new VisitorFlags().toJson());
+                                    stmt.setString(10, worldTypeKey);
+                                    stmt.executeUpdate();
 
-                                try (ResultSet rs = stmt.getGeneratedKeys()) {
-                                    if (rs.next()) {
-                                        int id = rs.getInt(1);
-                                        Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, worldUuid, worldTypeKey, borderRadius, false, false, false, new VisitorFlags());
-                                        homelandCache.computeIfAbsent(ownerUuid, k -> new CopyOnWriteArrayList<>()).add(homeland);
-                                        indexHomeland(homeland);
+                                    try (ResultSet rs = stmt.getGeneratedKeys()) {
+                                        if (rs.next()) {
+                                            int id = rs.getInt(1);
+                                            Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, worldUuid, worldTypeKey, borderRadius, false, false, false, new VisitorFlags());
+                                            homelandCache.computeIfAbsent(ownerUuid, k -> new CopyOnWriteArrayList<>()).add(homeland);
+                                            indexHomeland(homeland);
+                                        }
                                     }
                                 }
-                            }
-                            return null;
-                        }, result -> {
-                            sendAsyncMessage(messageTarget, config.getMessage("homeland-created", "name", name));
-                            // 传送到家园（仅玩家自己创建时传送）
-                            if (!skipEconomy && messageTarget instanceof Player ownerPlayer && ownerPlayer.isOnline()) {
-                                ownerPlayer.getScheduler().execute(plugin, () -> {
-                                    Location spawn = overworld.getSpawnLocation();
-                                    ownerPlayer.teleportAsync(spawn);
-                                }, () -> {}, 1L);
-                            }
-                            lockedOnSuccess.run();
-                        }, error -> {
-                            if (isUniqueConstraintViolation(error)) {
-                                sendAsyncMessage(messageTarget, config.getMessage("homeland-name-exists", "name", name));
-                            } else {
-                                plugin.getLogger().warning("创建家园数据库记录失败: " + error.getMessage());
-                                sendAsyncMessage(messageTarget, config.getMessage("create-failed-db"));
-                            }
-                            // 尝试清理已创建的世界
-                            try {
-                                plugin.getWorldsProvider().levelView().deleteAsync(overworld, true);
-                            } catch (Exception ex) {
-                                plugin.getLogger().warning("清理失败的世界失败: " + ex.getMessage());
-                            }
+                                return null;
+                            }, result -> {
+                                sendAsyncMessage(messageTarget, config.getMessage("homeland-created", "name", name));
+                                // 传送到家园（仅玩家自己创建时传送）
+                                if (!skipEconomy && messageTarget instanceof Player ownerPlayer && ownerPlayer.isOnline()) {
+                                    ownerPlayer.getScheduler().execute(plugin, () -> {
+                                        Location spawn = overworld.getSpawnLocation();
+                                        ownerPlayer.teleportAsync(spawn);
+                                    }, () -> {}, 1L);
+                                }
+                                lockedOnSuccess.run();
+                            }, error -> {
+                                if (isUniqueConstraintViolation(error)) {
+                                    sendAsyncMessage(messageTarget, config.getMessage("homeland-name-exists", "name", name));
+                                } else {
+                                    plugin.getLogger().warning("创建家园数据库记录失败: " + error.getMessage());
+                                    sendAsyncMessage(messageTarget, config.getMessage("create-failed-db"));
+                                }
+                                // 尝试清理已创建的世界
+                                try {
+                                    plugin.getWorldsProvider().levelView().deleteAsync(overworld, true);
+                                } catch (Exception ex) {
+                                    plugin.getLogger().warning("清理失败的世界失败: " + ex.getMessage());
+                                }
+                                refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
+                                lockedOnFailure.run();
+                            });
+                        } catch (Exception e) {
+                            plugin.getLogger().severe("创建家园后续处理失败: " + e.getMessage());
                             refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
+                            sendAsyncMessage(messageTarget, config.getMessage("create-failed"));
                             lockedOnFailure.run();
-                        });
-                    } catch (Exception e) {
-                        plugin.getLogger().severe("创建家园后续处理失败: " + e.getMessage());
-                        refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
-                        sendAsyncMessage(messageTarget, config.getMessage("create-failed"));
-                        lockedOnFailure.run();
-                    }
+                        }
+                    });
                 }).exceptionally(throwable -> {
                     plugin.getLogger().log(java.util.logging.Level.SEVERE, "创建家园世界失败: " + throwable.getMessage(), throwable);
                     refundEconomy(messageTarget instanceof Player p2 ? p2 : null, moneyCost, pointsCost);
