@@ -119,7 +119,9 @@ public class HomelandExpansion extends PlaceholderExpansion {
             else if (worldKey.endsWith("_the_end")) baseKey = worldKey.substring(0, worldKey.length() - 8);
 
             Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(baseKey);
-            if (homeland == null) return "";
+            if (homeland == null) {
+                return plugin.getConfigManager().getMessage("papi-current-owner-none");
+            }
 
             String ownerName = plugin.getServer().getOfflinePlayer(homeland.getOwnerUuid()).getName();
             return ownerName != null ? ownerName : homeland.getOwnerUuid().toString().substring(0, 8);

@@ -102,6 +102,7 @@ visitor-flag-update-failed: "&c设置访客权限失败！"
 command-blocked: "&c此命令在家园世界中被禁止使用。"
 
 # PAPI %simplehomeland_current% 变量格式
+papi-current-owner-none: "无"
 papi-current-main-world: "<green>桃花屋·大厅</green>"
 papi-current-overworld: "<green>桃花屋·{owner}·{name}·主世界</green>"
 papi-current-nether: "<red>桃花屋·{owner}·{name}·下界</red>"
