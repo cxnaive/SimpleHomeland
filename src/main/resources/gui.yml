@@ -15,9 +15,9 @@ global:
 homeland-list:
   size: 54
   # 每页显示数量
-  items-per-page: 4
+  items-per-page: 28
   # 每个列表项的槽位
-  page-slots: [10, 19, 28, 37]
+  page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
   # 翻页按钮
   page-prev-slot: 46
   page-next-slot: 53
@@ -116,8 +116,8 @@ gamerule:
 # ==================== 管理员 GUI ====================
 admin:
   size: 54
-  items-per-page: 4
-  page-slots: [10, 19, 28, 37]
+  items-per-page: 28
+  page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
   page-prev-slot: 45
   page-next-slot: 53
   # 提示信息
@@ -136,8 +136,8 @@ admin:
   # 管理员 - 玩家家园列表
   player-homelands:
     size: 54
-    items-per-page: 4
-    page-slots: [10, 19, 28, 37]
+    items-per-page: 28
+    page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
     page-prev-slot: 46
     page-next-slot: 53
     homeland-material: GRASS_BLOCK
@@ -151,8 +151,8 @@ admin:
 # ==================== 访问在线玩家 GUI ====================
 visitor:
   size: 54
-  items-per-page: 4
-  page-slots: [10, 19, 28, 37]
+  items-per-page: 28
+  page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
   page-prev-slot: 46
   page-next-slot: 53
   # 提示信息
@@ -170,8 +170,8 @@ visitor:
   # 访问 - 玩家家园列表
   player-homelands:
     size: 54
-    items-per-page: 4
-    page-slots: [10, 19, 28, 37]
+    items-per-page: 28
+    page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
     page-prev-slot: 46
     page-next-slot: 53
     homeland-accessible-material: GRASS_BLOCK

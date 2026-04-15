@@ -114,8 +114,8 @@ public class GUIConfig {
 
         public HomelandList(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
-            this.itemsPerPage = sec.getInt("items-per-page", 4);
-            this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 19, 28, 37});
+            this.itemsPerPage = sec.getInt("items-per-page", 28);
+            this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
             this.pagePrevSlot = sec.getInt("page-prev-slot", 46);
             this.pageNextSlot = sec.getInt("page-next-slot", 53);
             this.homelandMaterial = parseMaterial(sec, "homeland-material", "GRASS_BLOCK");
@@ -356,8 +356,8 @@ public class GUIConfig {
 
         public Admin(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
-            this.itemsPerPage = sec.getInt("items-per-page", 4);
-            this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 19, 28, 37});
+            this.itemsPerPage = sec.getInt("items-per-page", 28);
+            this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
             this.pagePrevSlot = sec.getInt("page-prev-slot", 45);
             this.pageNextSlot = sec.getInt("page-next-slot", 53);
             this.infoSlot = sec.getInt("info-slot", 4);
@@ -403,8 +403,8 @@ public class GUIConfig {
 
             public PlayerHomelands(ConfigurationSection sec) {
                 this.size = sec.getInt("size", 54);
-                this.itemsPerPage = sec.getInt("items-per-page", 4);
-                this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 19, 28, 37});
+                this.itemsPerPage = sec.getInt("items-per-page", 28);
+                this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
                 this.pagePrevSlot = sec.getInt("page-prev-slot", 46);
                 this.pageNextSlot = sec.getInt("page-next-slot", 53);
                 this.homelandMaterial = parseMaterial(sec, "homeland-material", "GRASS_BLOCK");
@@ -450,8 +450,8 @@ public class GUIConfig {
 
         public Visitor(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
-            this.itemsPerPage = sec.getInt("items-per-page", 4);
-            this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 19, 28, 37});
+            this.itemsPerPage = sec.getInt("items-per-page", 28);
+            this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
             this.pagePrevSlot = sec.getInt("page-prev-slot", 46);
             this.pageNextSlot = sec.getInt("page-next-slot", 53);
             this.infoSlot = sec.getInt("info-slot", 4);
@@ -494,8 +494,8 @@ public class GUIConfig {
 
             public PlayerHomelands(ConfigurationSection sec) {
                 this.size = sec.getInt("size", 54);
-                this.itemsPerPage = sec.getInt("items-per-page", 4);
-                this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 19, 28, 37});
+                this.itemsPerPage = sec.getInt("items-per-page", 28);
+                this.pageSlots = parseIntArray(sec, "page-slots", new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
                 this.pagePrevSlot = sec.getInt("page-prev-slot", 46);
                 this.pageNextSlot = sec.getInt("page-next-slot", 53);
                 this.homelandAccessibleMaterial = parseMaterial(sec, "homeland-accessible-material", "GRASS_BLOCK");

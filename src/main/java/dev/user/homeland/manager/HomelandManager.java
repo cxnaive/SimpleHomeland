@@ -1463,12 +1463,6 @@ public class HomelandManager {
         }
 
         World overworld = getHomelandWorld(homeland.getWorldKey());
-        if (overworld == null) {
-            sendAsyncMessage(messageTarget, config.getMessage("reset-world-not-loaded"));
-            refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
-            onFailure.run();
-            return;
-        }
 
         // 记录维度状态
         boolean hadNether = homeland.hasNether();
@@ -1476,7 +1470,126 @@ public class HomelandManager {
         World netherWorld = hadNether ? getHomelandWorld(homeland.getWorldKey() + "_nether") : null;
         World endWorld = hadEnd ? getHomelandWorld(homeland.getWorldKey() + "_the_end") : null;
 
-        // 传送所有玩家到大厅
+        // 卸载后的重建逻辑（删除 region 文件 + 用 levelBuilder 创建新世界）
+        java.lang.Runnable doRebuild = () -> {
+            try {
+                // 只删 region/entity 文件
+                java.nio.file.Path worldPath = provider.levelView().getWorldContainer()
+                        .resolve("homelands/" + homeland.getWorldKey());
+                if (java.nio.file.Files.exists(worldPath)) {
+                    deleteRegionFiles(worldPath);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("删除世界文件失败: " + e.getMessage());
+            }
+
+            // 用 levelBuilder 重建
+            java.nio.file.Path worldPath = java.nio.file.Path.of("homelands/" + homeland.getWorldKey());
+            Level.Builder builder = provider.levelBuilder(worldPath)
+                    .key(Key.key("simplehomeland", homeland.getWorldKey()))
+                    .name(homeland.getName())
+                    .ignoreLevelData(true); // 忽略旧 level.dat，完全使用新配置
+
+            // 覆盖世界类型
+            switch (worldTypeKey) {
+                case "void" -> {
+                    builder.chunkGenerator(new dev.user.homeland.generator.SkyblockChunkGenerator())
+                           .structures(false).bonusChest(false);
+                }
+                case "flat" -> {
+                    builder.generatorType(net.thenextlvl.worlds.api.generator.GeneratorType.FLAT)
+                           .preset(net.thenextlvl.worlds.api.preset.Presets.CLASSIC_FLAT)
+                           .structures(false).bonusChest(false);
+                }
+                default -> {
+                    builder.structures(config.isWorldStructures())
+                           .bonusChest(config.isWorldBonusChest());
+                }
+            }
+
+            // 设置新种子（确保生成不同地形）
+            builder.seed(new java.util.Random().nextLong());
+
+            Level level = builder.build();
+            level.createAsync().thenAccept(newOverworld -> {
+                try {
+                    // 设置出生点：所有类型都设在 (0,0) 附近确保在 border 内
+                    if ("void".equals(worldTypeKey)) {
+                        newOverworld.setSpawnLocation(8, 63, 8);
+                    } else {
+                        int safeY = newOverworld.getHighestBlockYAt(0, 0) + 1;
+                        newOverworld.setSpawnLocation(0, Math.max(safeY, 1), 0);
+                    }
+
+                    // 设置边界（createAsync 回调已在 global 线程，直接设置）
+                    int radius = homeland.getBorderRadius();
+                    newOverworld.getWorldBorder().setCenter(0, 0);
+                    newOverworld.getWorldBorder().setSize(radius * 2);
+
+                    provider.levelView().setEnabled(newOverworld, true);
+                    newOverworld.setAutoSave(true);
+                    touchLastPlayerTime(homeland.getWorldKey());
+
+                    // 应用默认游戏规则
+                    applyDefaultGamerules(newOverworld);
+
+                    // 重新关联维度传送门
+                    LinkProvider linker = provider.linkProvider();
+                    if (netherWorld != null) {
+                        linker.link(newOverworld, netherWorld);
+                    }
+                    if (endWorld != null) {
+                        linker.link(newOverworld, endWorld);
+                    }
+
+                    // 更新 DB: world_uuid 和 world_type
+                    java.util.UUID newWorldUuid = newOverworld.getUID();
+                    plugin.getDatabaseQueue().submit("reset-overworld", conn -> {
+                        try (PreparedStatement stmt = conn.prepareStatement(
+                                "UPDATE homeland SET world_uuid = ?, world_type = ? WHERE id = ?")) {
+                            stmt.setString(1, newWorldUuid.toString());
+                            stmt.setString(2, worldTypeKey);
+                            stmt.setInt(3, homeland.getId());
+                            stmt.executeUpdate();
+                        }
+                        return null;
+                    }, result -> {
+                        // 更新内存
+                        if (homeland.getWorldUuid() != null) {
+                            worldUuidIndex.remove(homeland.getWorldUuid());
+                        }
+                        homeland.setWorldUuid(newWorldUuid);
+                        homeland.setWorldType(worldTypeKey);
+                        worldUuidIndex.put(newWorldUuid, homeland);
+
+                        sendAsyncMessage(messageTarget, config.getMessage("reset-overworld-success", "name", homeland.getName()));
+                        onSuccess.run();
+                    }, error -> {
+                        plugin.getLogger().warning("重置世界数据库更新失败: " + error.getMessage());
+                        sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
+                        onFailure.run();
+                    });
+                } catch (Exception e) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + e.getMessage(), e);
+                    sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
+                    onFailure.run();
+                }
+            }).exceptionally(throwable -> {
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "重置世界失败: " + throwable.getMessage(), throwable);
+                sendAsyncMessage(messageTarget, config.getMessage("reset-failed"));
+                refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
+                onFailure.run();
+                return null;
+            });
+        };
+
+        if (overworld == null) {
+            // 世界已卸载：直接删除 region 文件并重建，无需传送玩家或卸载世界
+            doRebuild.run();
+            return;
+        }
+
+        // 世界已加载：传送所有玩家到大厅
         org.bukkit.World mainWorld = Bukkit.getWorlds().get(0);
         for (Player p : overworld.getPlayers()) {
             p.teleportAsync(mainWorld.getSpawnLocation());
@@ -1487,14 +1600,14 @@ public class HomelandManager {
         if (netherWorld != null) linker.unlink(overworld, netherWorld);
         if (endWorld != null) linker.unlink(overworld, endWorld);
 
-        // 卸载世界（不删除文件），然后只删 region 文件保留 level.dat
+        // 卸载世界（不删除文件），然后只删 region 文件
         provider.levelView().unloadAsync(overworld, false).thenCompose(success -> {
             if (!success) {
                 return java.util.concurrent.CompletableFuture.failedFuture(
                         new RuntimeException("卸载主世界失败"));
             }
 
-            // 只删 region/entity 文件，保留 level.dat（含出生点）
+            // 只删 region/entity 文件
             try {
                 java.nio.file.Path worldPath = provider.levelView().getWorldContainer()
                         .resolve("homelands/" + homeland.getWorldKey());
@@ -1503,18 +1616,12 @@ public class HomelandManager {
                 plugin.getLogger().warning("删除世界文件失败: " + e.getMessage());
             }
 
-            // 从 level.dat 读取并构建新世界
-            java.nio.file.Path worldPath = provider.levelView().getWorldContainer()
-                    .resolve("homelands/" + homeland.getWorldKey());
-            java.util.Optional<Level.Builder> builderOpt = provider.levelView().read(worldPath);
-            if (builderOpt.isEmpty()) {
-                return java.util.concurrent.CompletableFuture.failedFuture(
-                        new RuntimeException("读取 level.dat 失败"));
-            }
-
-            Level.Builder builder = builderOpt.get()
+            // 用 levelBuilder 重建，忽略旧 level.dat
+            java.nio.file.Path worldPath = java.nio.file.Path.of("homelands/" + homeland.getWorldKey());
+            Level.Builder builder = provider.levelBuilder(worldPath)
                     .key(Key.key("simplehomeland", homeland.getWorldKey()))
-                    .name(homeland.getName());
+                    .name(homeland.getName())
+                    .ignoreLevelData(true);
 
             // 覆盖世界类型
             switch (worldTypeKey) {
@@ -1540,17 +1647,18 @@ public class HomelandManager {
             return level.createAsync();
         }).thenAccept(newOverworld -> {
             try {
-                // 设置出生点
+                // 设置出生点：所有类型都设在 (0,0) 附近确保在 border 内
                 if ("void".equals(worldTypeKey)) {
                     newOverworld.setSpawnLocation(8, 63, 8);
+                } else {
+                    int safeY = newOverworld.getHighestBlockYAt(0, 0) + 1;
+                    newOverworld.setSpawnLocation(0, Math.max(safeY, 1), 0);
                 }
 
-                // 设置边界
+                // 设置边界（createAsync 回调已在 global 线程，直接设置）
                 int radius = homeland.getBorderRadius();
-                Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
-                    newOverworld.getWorldBorder().setCenter(0, 0);
-                    newOverworld.getWorldBorder().setSize(radius * 2);
-                });
+                newOverworld.getWorldBorder().setCenter(0, 0);
+                newOverworld.getWorldBorder().setSize(radius * 2);
 
                 provider.levelView().setEnabled(newOverworld, true);
                 newOverworld.setAutoSave(true);
@@ -1719,22 +1827,15 @@ public class HomelandManager {
                 return null;
             });
         } else {
-            // 世界未加载：手动删除 region 文件，保留 level.dat，然后从 level.dat 重建
+            // 世界未加载：手动删除 region 文件后用 levelBuilder 重建
             try {
                 java.nio.file.Path dimPath = provider.levelView().getWorldContainer().resolve("homelands/" + dimWorldKey);
                 if (java.nio.file.Files.exists(dimPath)) {
                     deleteRegionFiles(dimPath);
                 }
 
-                // 从 level.dat 读取（含出生点），避免 spawn 扫描阻塞 global 线程
-                java.util.Optional<Level.Builder> builderOpt = provider.levelView().read(dimPath);
-                if (builderOpt.isEmpty()) {
-                    // level.dat 也不存在（可能从未创建过），fallback 到从零创建
-                    createDimensionWorld(provider, homeland, overworld, isNether, config, messageTarget, moneyCost, pointsCost, onSuccess, onFailure);
-                    return;
-                }
-
-                Level.Builder builder = builderOpt.get()
+                // 用 levelBuilder 重建（不依赖 levelView.read，因为自定义 generator 会导致 read 失败）
+                Level.Builder builder = provider.levelBuilder(java.nio.file.Path.of("homelands/" + dimWorldKey))
                         .key(Key.key("simplehomeland", dimWorldKey))
                         .name(homeland.getName() + (isNether ? " - 地狱" : " - 末地"))
                         .levelStem(isNether ? net.thenextlvl.worlds.api.generator.LevelStem.NETHER : net.thenextlvl.worlds.api.generator.LevelStem.END)
