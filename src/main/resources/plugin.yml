@@ -16,7 +16,6 @@ softdepend: [XConomy, PlayerPoints]
 commands:
   homeland:
     description: 家园管理命令
-    permission: simplehomeland.use
     aliases: [hl]
 
 permissions:

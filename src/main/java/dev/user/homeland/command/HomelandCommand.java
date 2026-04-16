@@ -46,6 +46,10 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                              @NotNull String label, @NotNull String[] args) {
         if (args.length == 0) {
             if (sender instanceof Player player) {
+                if (!player.hasPermission(PERM_USE)) {
+                    MessageUtil.send(player, plugin.getConfigManager().getMessage("no-gui-permission"));
+                    return true;
+                }
                 dev.user.homeland.gui.HomelandGUI.open(plugin, player);
             } else {
                 sendUsage(sender);
