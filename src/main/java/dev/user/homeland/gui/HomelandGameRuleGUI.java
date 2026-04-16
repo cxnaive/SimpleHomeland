@@ -9,6 +9,7 @@ import dev.user.homeland.util.MessageUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.ChatColor;
+import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -105,6 +106,19 @@ public class HomelandGameRuleGUI extends AbstractGUI {
 
             addGamerulePageButtons(gamerules.size());
         }
+
+        // 难度设置按钮
+        setItem(cfg.getDifficultySlot(), createDifficultyItem(overworld), (p, e) -> {
+            if (overworld == null) return;
+            Difficulty current = overworld.getDifficulty();
+            Difficulty next;
+            if (e.getClick() == ClickType.RIGHT) {
+                next = cycleDifficulty(current, true);
+            } else {
+                next = cycleDifficulty(current, false);
+            }
+            handleDifficultyClick(next, p);
+        });
 
         // 底部导航
         if (isAdmin) {
@@ -245,6 +259,78 @@ public class HomelandGameRuleGUI extends AbstractGUI {
             return String.valueOf(world.getGameRuleValue((GameRule<Boolean>) grc.getGameRule()));
         } else {
             return String.valueOf(world.getGameRuleValue((GameRule<Integer>) grc.getGameRule()));
+        }
+    }
+
+    private Difficulty cycleDifficulty(Difficulty current, boolean reverse) {
+        Difficulty[] order = Difficulty.values(); // PEACEFUL, EASY, NORMAL, HARD
+        int idx = current.ordinal();
+        if (reverse) {
+            idx = (idx - 1 + order.length) % order.length;
+        } else {
+            idx = (idx + 1) % order.length;
+        }
+        return order[idx];
+    }
+
+    private ItemStack createDifficultyItem(World overworld) {
+        ItemStack item = new ItemStack(cfg.getDifficultyMaterial());
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        if (overworld == null) {
+            meta.displayName(MessageUtil.guiName(config.getMessage("gui.difficulty-item-name")));
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+            lore.add(MessageUtil.guiLore(config.getMessage("gui.difficulty-world-not-loaded")));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+            return item;
+        }
+
+        Difficulty diff = overworld.getDifficulty();
+        String diffDisplay = getDifficultyDisplayName(diff);
+
+        meta.displayName(MessageUtil.guiName(config.getMessage("gui.difficulty-item-name")));
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.difficulty-item-lore", "difficulty", diffDisplay)));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.difficulty-item-click")));
+
+        meta.lore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private String getDifficultyDisplayName(Difficulty diff) {
+        switch (diff) {
+            case PEACEFUL: return config.getMessage("gui.difficulty-peaceful");
+            case EASY: return config.getMessage("gui.difficulty-easy");
+            case NORMAL: return config.getMessage("gui.difficulty-normal");
+            case HARD: return config.getMessage("gui.difficulty-hard");
+            default: return diff.name();
+        }
+    }
+
+    private void handleDifficultyClick(Difficulty newDifficulty, Player p) {
+        String diffDisplay = getDifficultyDisplayName(newDifficulty);
+
+        Runnable onSuccess = () -> p.getScheduler().execute(plugin, () -> {
+            MessageUtil.send(p, config.getMessage("gui.difficulty-set-success",
+                    "name", homelandName, "difficulty", diffDisplay));
+            refresh();
+        }, () -> {}, 0L);
+
+        Runnable onFailure = () -> p.getScheduler().execute(plugin, () -> {
+            MessageUtil.send(p, config.getMessage("gui.difficulty-set-failed"));
+            refresh();
+        }, () -> {}, 0L);
+
+        if (isAdmin) {
+            plugin.getHomelandManager().setDifficultyAdmin(p, ownerUuid, homelandName, newDifficulty, onSuccess, onFailure);
+        } else {
+            plugin.getHomelandManager().setDifficulty(p, homelandName, newDifficulty, onSuccess, onFailure);
         }
     }
 }

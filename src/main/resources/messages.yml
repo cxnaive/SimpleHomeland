@@ -288,6 +288,18 @@ gui:
   reset-cost-free: "&a免费"
   reset-type-title: "&c选择新地形 - {name}"
 
+# 世界难度设置
+  difficulty-item-name: "&6世界难度"
+  difficulty-item-lore: "&7当前难度: {difficulty}"
+  difficulty-item-click: "&e左键切换难度, 右键反向切换"
+  difficulty-set-success: "&a已将家园 &e{name} &a的难度设为 &e{difficulty}"
+  difficulty-set-failed: "&c设置难度失败！"
+  difficulty-world-not-loaded: "&c家园世界未加载，无法设置难度！"
+  difficulty-peaceful: "&a和平"
+  difficulty-easy: "&e简单"
+  difficulty-normal: "&7普通"
+  difficulty-hard: "&c困难"
+
 # 重置结果消息
 reset-overworld-success: "&a已成功重置家园 &e{name} &a的主世界！"
 reset-nether-success: "&a已成功重置家园 &e{name} &a的下界！"

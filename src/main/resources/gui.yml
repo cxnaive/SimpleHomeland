@@ -112,6 +112,9 @@ gamerule:
   page-info-slot: 49
   next-slot: 51
   close-slot: 53
+  # 难度设置按钮
+  difficulty-slot: 46
+  difficulty-material: DIAMOND_SWORD
 
 # ==================== 管理员 GUI ====================
 admin:

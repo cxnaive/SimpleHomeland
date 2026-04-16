@@ -59,6 +59,7 @@ public class ConfigManager {
     private int spawnYVoid;
     private int spawnYFlat;
     private String defaultWorldType;
+    private String defaultDifficulty;
     private int autoUnloadSeconds;
     private boolean preloadWorlds;
 
@@ -137,6 +138,11 @@ public class ConfigManager {
         this.spawnYVoid = config.getInt("homeland.world.spawn-y.void", 63);
         this.spawnYFlat = config.getInt("homeland.world.spawn-y.flat", -60);
         this.defaultWorldType = config.getString("homeland.world-type", "default");
+        this.defaultDifficulty = config.getString("homeland.default-difficulty", "hard");
+        if (!List.of("peaceful", "easy", "normal", "hard").contains(this.defaultDifficulty.toLowerCase())) {
+            plugin.getLogger().warning("无效的 default-difficulty: " + this.defaultDifficulty + ", 使用 normal");
+            this.defaultDifficulty = "normal";
+        }
         this.autoUnloadSeconds = config.getInt("homeland.auto-unload-seconds", 600);
         this.preloadWorlds = config.getBoolean("homeland.preload-worlds", false);
 
@@ -296,6 +302,7 @@ public class ConfigManager {
     public int getSpawnYVoid() { return spawnYVoid; }
     public int getSpawnYFlat() { return spawnYFlat; }
     public String getDefaultWorldType() { return defaultWorldType; }
+    public String getDefaultDifficulty() { return defaultDifficulty; }
     public int getAutoUnloadSeconds() { return autoUnloadSeconds; }
     public boolean isPreloadWorlds() { return preloadWorlds; }
 

@@ -107,6 +107,19 @@ public class HomelandExpansion extends PlaceholderExpansion {
                     .orElse("false");
         }
 
+        // %simplehomeland_difficulty_<名称>% — 指定家园的难度
+        if (param.startsWith("difficulty_")) {
+            String name = param.substring(11);
+            return homelands.stream()
+                    .filter(h -> h.getName().equalsIgnoreCase(name))
+                    .findFirst()
+                    .map(h -> {
+                        World w = plugin.getHomelandManager().getHomelandWorld(h.getWorldKey());
+                        return w != null ? w.getDifficulty().name().toLowerCase() : "";
+                    })
+                    .orElse("");
+        }
+
         // %simplehomeland_current_owner% — 当前所在世界的家园主人名字
         if (param.equals("current_owner")) {
             if (!(player instanceof org.bukkit.entity.Player onlinePlayer)) return "";

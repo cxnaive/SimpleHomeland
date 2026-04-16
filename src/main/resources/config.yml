@@ -67,6 +67,8 @@ homeland:
       flat: -60     # 超平坦出生高度
   # 默认地形类型（default=默认地形, void=空岛, flat=超平坦）
   world-type: default
+  # 默认世界难度（peaceful/easy/normal/hard）
+  default-difficulty: hard
   # 世界无玩家后自动卸载时间（秒），0 = 不自动卸载
   auto-unload-seconds: 600
   # 服务器启动时预加载所有家园世界（确保外部插件传送兼容）

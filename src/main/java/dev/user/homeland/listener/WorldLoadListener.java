@@ -15,7 +15,7 @@ import org.bukkit.event.world.WorldLoadEvent;
  * 每次世界加载时：
  * - 开启自动保存
  * - 恢复 WorldBorder
- * - 子维度：重新关联传送门 link + 从主世界同步游戏规则
+ * - 子维度：重新关联传送门 link + 从主世界同步游戏规则 + 同步难度
  */
 public class WorldLoadListener implements Listener {
 
@@ -62,7 +62,7 @@ public class WorldLoadListener implements Listener {
                 }
             }
         } else {
-            // 子维度加载时：关联主世界 + 同步游戏规则
+            // 子维度加载时：关联主世界 + 同步游戏规则 + 同步难度
             Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
                 World overworld = plugin.getHomelandManager().getHomelandWorld(baseWorldKey);
                 if (overworld != null) {
@@ -70,8 +70,10 @@ public class WorldLoadListener implements Listener {
                         provider.linkProvider().link(overworld, world);
                     }
                     plugin.getHomelandManager().copyGamerules(overworld, world);
+                    plugin.getHomelandManager().copyDifficulty(overworld, world);
                 } else {
                     plugin.getHomelandManager().applyDefaultGamerules(world);
+                    plugin.getHomelandManager().applyDefaultDifficulty(world);
                 }
             });
         }

@@ -311,6 +311,8 @@ public class GUIConfig {
         private final int pageInfoSlot;
         private final int nextSlot;
         private final int closeSlot;
+        private final int difficultySlot;
+        private final Material difficultyMaterial;
 
         public GameRule(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
@@ -323,6 +325,8 @@ public class GUIConfig {
             this.pageInfoSlot = sec.getInt("page-info-slot", 49);
             this.nextSlot = sec.getInt("next-slot", 51);
             this.closeSlot = sec.getInt("close-slot", 53);
+            this.difficultySlot = sec.getInt("difficulty-slot", 46);
+            this.difficultyMaterial = parseMaterial(sec, "difficulty-material", "DIAMOND_SWORD");
         }
 
         public int getSize() { return size; }
@@ -334,6 +338,8 @@ public class GUIConfig {
         public int getPageInfoSlot() { return pageInfoSlot; }
         public int getNextSlot() { return nextSlot; }
         public int getCloseSlot() { return closeSlot; }
+        public int getDifficultySlot() { return difficultySlot; }
+        public Material getDifficultyMaterial() { return difficultyMaterial; }
     }
 
     // ==================== 管理员 GUI ====================

@@ -15,6 +15,7 @@
 - 阶梯式创建与扩展费用
 - 金币（XConomy）和点券（PlayerPoints）经济支持
 - 完整 GUI 管理界面
+- 世界难度设置（和平/简单/普通/困难）
 - PlaceholderAPI 变量支持
 - Folia 兼容
 - 对外传送 API，可供其他插件调用
@@ -102,6 +103,7 @@
 | `%simplehomeland_is_public_<名称>%` | 是否公开 |
 | `%simplehomeland_current%` | 当前所在世界信息 |
 | `%simplehomeland_current_owner%` | 当前家园主人（大厅时显示配置值） |
+| `%simplehomeland_difficulty_<名称>%` | 指定家园难度（peaceful/easy/normal/hard） |
 
 ## 访客权限（17 种）
 
@@ -136,6 +138,7 @@ homeland:
   max-border-radius: 5000
   border-expand-step: 100
   world-type: default            # default / void / flat
+  default-difficulty: hard       # peaceful / easy / normal / hard
   auto-unload-seconds: 600       # 空闲自动卸载，0 禁用
   preload-worlds: false          # 启动时预加载所有世界（启用后常驻内存）
 

@@ -15,6 +15,7 @@ import net.thenextlvl.worlds.api.level.Level;
 import net.thenextlvl.worlds.api.link.LinkProvider;
 import net.thenextlvl.worlds.api.view.LevelView;
 import org.bukkit.Bukkit;
+import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -401,6 +402,8 @@ public class HomelandManager {
 
                                 // 应用默认游戏规则
                                 applyDefaultGamerules(overworld);
+                                // 应用默认世界难度
+                                applyDefaultDifficulty(overworld);
 
                                 // 写入数据库
                                 java.util.UUID worldUuid = overworld.getUID();
@@ -1144,6 +1147,8 @@ public class HomelandManager {
 
                         // 从主世界复制游戏规则
                         copyGamerules(overworld, nether);
+                        // 从主世界复制难度
+                        copyDifficulty(overworld, nether);
 
                         // 更新数据库
                         homeland.setHasNether(true);
@@ -1275,6 +1280,8 @@ public class HomelandManager {
 
                         // 从主世界复制游戏规则
                         copyGamerules(overworld, end);
+                        // 从主世界复制难度
+                        copyDifficulty(overworld, end);
 
                         // 更新数据库
                         homeland.setHasEnd(true);
@@ -1569,6 +1576,8 @@ public class HomelandManager {
 
                             // 应用默认游戏规则
                             applyDefaultGamerules(newOverworld);
+                            // 应用默认世界难度
+                            applyDefaultDifficulty(newOverworld);
 
                             // 重新关联维度传送门
                             LinkProvider linker = provider.linkProvider();
@@ -1717,6 +1726,8 @@ public class HomelandManager {
 
                         // 应用默认游戏规则
                         applyDefaultGamerules(newOverworld);
+                        // 应用默认世界难度
+                        applyDefaultDifficulty(newOverworld);
 
                         // 重新关联维度传送门
                         if (netherWorld != null) {
@@ -1866,6 +1877,7 @@ public class HomelandManager {
                     touchLastPlayerTime(dimWorldKey);
                     if (overworld != null) {
                         copyGamerules(overworld, newDim);
+                        copyDifficulty(overworld, newDim);
                     }
                 }
 
@@ -1909,6 +1921,7 @@ public class HomelandManager {
                         touchLastPlayerTime(dimWorldKey);
                         if (overworld != null) {
                             copyGamerules(overworld, newDim);
+                            copyDifficulty(overworld, newDim);
                         }
 
                         String msgKey = isNether ? "reset-nether-success" : "reset-end-success";
@@ -1968,6 +1981,7 @@ public class HomelandManager {
                 // 复制游戏规则
                 if (overworld != null) {
                     copyGamerules(overworld, newDim);
+                    copyDifficulty(overworld, newDim);
                 }
 
                 String msgKey = isNether ? "reset-nether-success" : "reset-end-success";
@@ -2367,6 +2381,95 @@ public class HomelandManager {
                 World end = getHomelandWorld(worldKey + "_the_end");
                 if (end != null) {
                     applyGamerule(end, grc, value);
+                }
+            }
+
+            onSuccess.run();
+        });
+    }
+
+    // ==================== 世界难度 ====================
+
+    public void applyDefaultDifficulty(World world) {
+        world.setDifficulty(Difficulty.valueOf(plugin.getConfigManager().getDefaultDifficulty().toUpperCase()));
+    }
+
+    public void copyDifficulty(World source, World target) {
+        target.setDifficulty(source.getDifficulty());
+    }
+
+    public void setDifficulty(Player player, String homelandName, Difficulty difficulty,
+                              Runnable onSuccess, Runnable onFailure) {
+        Optional<Homeland> optHomeland = getHomeland(player.getUniqueId(), homelandName);
+        if (optHomeland.isEmpty()) {
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
+            onFailure.run();
+            return;
+        }
+
+        Homeland homeland = optHomeland.get();
+        String worldKey = homeland.getWorldKey();
+
+        World overworld = getHomelandWorld(worldKey);
+        if (overworld == null) {
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("difficulty-world-not-loaded"));
+            onFailure.run();
+            return;
+        }
+
+        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+            overworld.setDifficulty(difficulty);
+
+            // 同步到已加载的子维度
+            if (homeland.hasNether()) {
+                World nether = getHomelandWorld(worldKey + "_nether");
+                if (nether != null) {
+                    nether.setDifficulty(difficulty);
+                }
+            }
+            if (homeland.hasEnd()) {
+                World end = getHomelandWorld(worldKey + "_the_end");
+                if (end != null) {
+                    end.setDifficulty(difficulty);
+                }
+            }
+
+            onSuccess.run();
+        });
+    }
+
+    public void setDifficultyAdmin(Player player, UUID ownerUuid, String homelandName, Difficulty difficulty,
+                                   Runnable onSuccess, Runnable onFailure) {
+        Optional<Homeland> optHomeland = getHomeland(ownerUuid, homelandName);
+        if (optHomeland.isEmpty()) {
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
+            onFailure.run();
+            return;
+        }
+
+        Homeland homeland = optHomeland.get();
+        String worldKey = homeland.getWorldKey();
+
+        World overworld = getHomelandWorld(worldKey);
+        if (overworld == null) {
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("difficulty-world-not-loaded"));
+            onFailure.run();
+            return;
+        }
+
+        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+            overworld.setDifficulty(difficulty);
+
+            if (homeland.hasNether()) {
+                World nether = getHomelandWorld(worldKey + "_nether");
+                if (nether != null) {
+                    nether.setDifficulty(difficulty);
+                }
+            }
+            if (homeland.hasEnd()) {
+                World end = getHomelandWorld(worldKey + "_the_end");
+                if (end != null) {
+                    end.setDifficulty(difficulty);
                 }
             }
 
