@@ -8,16 +8,19 @@
 
 - 每位玩家可拥有多个独立家园世界
 - 支持三种地形：默认、空岛、超平坦
+- 世界重置（重新生成，可选新地形类型）
 - 地狱 / 末地维度解锁与自动加载
 - 细粒度访客权限系统（17 种权限开关）
 - 公开 / 私有切换 + 玩家邀请机制
+- 阶梯式创建与扩展费用
 - 金币（XConomy）和点券（PlayerPoints）经济支持
 - 完整 GUI 管理界面
 - PlaceholderAPI 变量支持
 - Folia 兼容
 - 对外传送 API，可供其他插件调用
 - 支持 H2（单机）和 MySQL（跨服）数据库
-- 空闲世界自动卸载
+- 空闲世界自动卸载 / 启动时预加载
+- 可配置出生高度（默认/空岛/超平坦）
 
 ## 依赖
 
@@ -98,6 +101,17 @@
 | `%simplehomeland_has_end_<名称>%` | 是否解锁末地 |
 | `%simplehomeland_is_public_<名称>%` | 是否公开 |
 | `%simplehomeland_current%` | 当前所在世界信息 |
+| `%simplehomeland_current_owner%` | 当前家园主人（大厅时显示配置值） |
+
+## 访客权限（17 种）
+
+| 分类 | 权限 | 默认 |
+|------|------|------|
+| 方块 | place（放置）/ break（破坏） | 禁止 |
+| 交互 | interact（交互）/ container（容器）/ anvil（铁砧）/ enchant（附魔） | 禁止 |
+| 物品 | pickup（拾取）/ drop（丢弃） | 允许 |
+| 战斗 | kill_animal（攻击动物）/ kill_monster（攻击怪物）/ pvp（对战） | 禁止(动物)/允许(怪物)/禁止(对战) |
+| 其他 | farming（农业）/ vehicle（载具）/ bed（床）/ trade（交易）/ projectile（投掷） | 禁止 |
 
 ## 配置
 
@@ -123,15 +137,31 @@ homeland:
   border-expand-step: 100
   world-type: default            # default / void / flat
   auto-unload-seconds: 600       # 空闲自动卸载，0 禁用
-  preload-worlds: false          # 启动时预加载所有世界
+  preload-worlds: false          # 启动时预加载所有世界（启用后常驻内存）
 
-  # 费用 (设为 0 表示免费)
+  # 阶梯式创建费用（超出列表取最后一档，设 0 免费）
   creation:
-    money: 1000
-    points: 0
+    tiers:
+      - money: 1000
+        points: 0
+      - money: 2000
+        points: 0
+      - money: 5000
+        points: 10
+
+  # 阶梯式扩展费用（按当前半径区间计费）
   expansion:
-    money: 100
-    points: 0
+    tiers:
+      - min-radius: 0
+        money: 100
+        points: 0
+      - min-radius: 1000
+        money: 200
+        points: 0
+      - min-radius: 2000
+        money: 500
+        points: 5
+
   nether-unlock:
     money: 500
     points: 0
@@ -139,11 +169,27 @@ homeland:
     money: 1000
     points: 0
 
+  # 世界重置费用
+  reset:
+    overworld:
+      money: 500
+      points: 0
+    nether:
+      money: 300
+      points: 0
+    end:
+      money: 300
+      points: 0
+
   # 世界生成
   world:
     seed: ""                     # 留空随机
     structures: true
     bonus-chest: false
+    spawn-y:
+      default: -60               # 自动检测（此值为 fallback）
+      void: 63                   # 空岛起始台高度
+      flat: -60                  # 超平坦出生高度
 
 # 命令拦截
 command-block:
@@ -174,7 +220,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.cxnaive:SimpleHomeland:v1.2.0")
+    compileOnly("com.github.cxnaive:SimpleHomeland:v1.4.5")
 }
 ```
 
@@ -189,7 +235,7 @@ dependencies {
 <dependency>
     <groupId>com.github.cxnaive</groupId>
     <artifactId>SimpleHomeland</artifactId>
-    <version>v1.2.0</version>
+    <version>v1.4.5</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -218,6 +264,11 @@ Location loc = new Location(world, 100, 64, 200);
 SimpleHomelandAPI.teleportToHomelandByWorldKey(player, worldKey, false, loc, result -> {
     // ...
 });
+
+// 按 worldUUID 传送（支持未加载世界自动加载）
+SimpleHomelandAPI.teleportToHomelandByWorldUUID(player, worldUUID, false, result -> {
+    // ...
+});
 ```
 
 ### TeleportResult
@@ -237,7 +288,7 @@ SimpleHomelandAPI.teleportToHomelandByWorldKey(player, worldKey, false, loc, res
 ./gradlew shadowJar
 ```
 
-输出：`build/libs/SimpleHomeland-1.2.0.jar`
+输出：`build/libs/SimpleHomeland-1.4.5.jar`
 
 ## 许可
 
