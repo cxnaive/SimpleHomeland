@@ -187,4 +187,125 @@ public final class SimpleHomelandAPI {
         }
         plugin.getHomelandManager().queryHomelandByWorldUUIDAsync(worldUUID, callback);
     }
+
+    // ==================== 加载世界 API ====================
+
+    /**
+     * 让主服务器加载指定的家园世界（通过 owner UUID + 名称）。
+     * <p>
+     * 分支模式下会发送跨服请求到主服务器，回调 {@link LoadWorldResult#REQUEST_SENT}。
+     * 主服务器模式下直接加载，回调实际结果。
+     *
+     * @param ownerUuid    家园所有者的 UUID
+     * @param homelandName 家园名称
+     * @param callback     结果回调
+     */
+    public static void loadHomelandWorld(UUID ownerUuid, String homelandName,
+                                          Consumer<LoadWorldResult> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(LoadWorldResult.WORLD_NOT_FOUND);
+            return;
+        }
+        plugin.getHomelandManager().loadHomelandWorldAPI(ownerUuid, homelandName, callback);
+    }
+
+    /**
+     * 让主服务器加载指定的家园世界（通过 world key）。
+     *
+     * @param worldKey 世界 key
+     * @param callback 结果回调
+     */
+    public static void loadHomelandWorldByWorldKey(String worldKey,
+                                                    Consumer<LoadWorldResult> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(LoadWorldResult.WORLD_NOT_FOUND);
+            return;
+        }
+        plugin.getHomelandManager().loadHomelandWorldByWorldKeyAPI(worldKey, callback);
+    }
+
+    /**
+     * 让主服务器加载指定的家园世界（通过世界 UUID）。
+     *
+     * @param worldUUID 世界 UUID（World.getUID()）
+     * @param callback  结果回调
+     */
+    public static void loadHomelandWorldByWorldUUID(UUID worldUUID,
+                                                      Consumer<LoadWorldResult> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(LoadWorldResult.WORLD_NOT_FOUND);
+            return;
+        }
+        plugin.getHomelandManager().loadHomelandWorldByWorldUUIDAPI(worldUUID, callback);
+    }
+
+    // ==================== 查询世界加载状态 ====================
+
+    /**
+     * 检查家园世界是否已加载（通过 world key，同步）。
+     * <p>
+     * 主服务器：本地即时检查，可在任意线程调用。
+     * 分支服务器：实时查询 Redis / MySQL 主服务器状态，
+     * MySQL 模式下会阻塞调用线程等待数据库响应，请勿在游戏线程调用。
+     * 如需非阻塞调用，请使用 {@link #isHomelandWorldLoadedAsync}。
+     *
+     * @param worldKey 世界 key
+     * @return 世界是否已加载
+     */
+    public static boolean isHomelandWorldLoaded(String worldKey) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) return false;
+        return plugin.getHomelandManager().isHomelandWorldLoaded(worldKey);
+    }
+
+    /**
+     * 异步检查家园世界是否已加载（通过 world key）。
+     * <p>
+     * 主服务器：查本地缓存，立即回调。分支服务器：异步查询 Redis / MySQL 主服务器状态。
+     *
+     * @param worldKey 世界 key
+     * @param callback 结果回调
+     */
+    public static void isHomelandWorldLoadedAsync(String worldKey, Consumer<Boolean> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(false);
+            return;
+        }
+        plugin.getHomelandManager().isHomelandWorldLoadedAsync(worldKey, callback);
+    }
+
+    /**
+     * 检查家园世界是否已加载（通过世界 UUID）。
+     * <p>
+     * 仅主服务器模式有效。分支服务器本地无缓存，请使用 {@link #isHomelandWorldLoadedByUUIDAsync}。
+     *
+     * @param worldUUID 世界 UUID（World.getUID()）
+     * @return 世界是否已加载
+     */
+    public static boolean isHomelandWorldLoadedByUUID(UUID worldUUID) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) return false;
+        return plugin.getHomelandManager().isHomelandWorldLoadedByUUID(worldUUID);
+    }
+
+    /**
+     * 异步检查家园世界是否已加载（通过世界 UUID）。
+     * <p>
+     * 主服务器：查本地缓存。分支服务器：先查 DB 获取 worldKey，再实时查询主服务器状态。
+     *
+     * @param worldUUID 世界 UUID（World.getUID()）
+     * @param callback  结果回调
+     */
+    public static void isHomelandWorldLoadedByUUIDAsync(UUID worldUUID, Consumer<Boolean> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(false);
+            return;
+        }
+        plugin.getHomelandManager().isHomelandWorldLoadedByUUIDAsync(worldUUID, callback);
+    }
 }

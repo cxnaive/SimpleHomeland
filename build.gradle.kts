@@ -6,9 +6,10 @@ plugins {
 }
 
 group = "dev.user"
-version = "1.6.0"
+version = "1.7.0"
 
 repositories {
+    maven("https://nexus.handyplus.cn/releases")
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://jitpack.io")
@@ -39,6 +40,9 @@ dependencies {
 
     // JSON 序列化 (由服务器通过 plugin.yml libraries 加载)
     compileOnly("com.google.code.gson:gson:2.12.1")
+
+    // PlayerWarp 地标点插件 (软依赖)
+    compileOnly("cn.handyplus.warp:PlayerWarp:2.3.7") { isTransitive = false }
 
     // Redis 客户端 (由服务器通过 plugin.yml libraries 加载)
     compileOnly("redis.clients:jedis:5.1.3")

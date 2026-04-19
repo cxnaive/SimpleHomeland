@@ -221,6 +221,9 @@ public class DatabaseManager {
                         "    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
                         ")";
                 stmt.execute(statusTable);
+                try {
+                    stmt.execute("ALTER TABLE homeland_server_status ADD COLUMN loaded_worlds TEXT");
+                } catch (SQLException ignored) {}
             }
         }
     }

@@ -2,6 +2,7 @@ package dev.user.homeland.manager;
 
 import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.api.HomelandInfo;
+import dev.user.homeland.api.LoadWorldResult;
 import dev.user.homeland.api.TeleportResult;
 import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.ConfigManager.GameRuleConfig;
@@ -811,6 +812,7 @@ public class HomelandManager {
                 if (homeland.getWorldUuid() == null) {
                     updateWorldUuid(homeland, world.getUID());
                 }
+                publishLoadedWorlds();
                 callback.accept(world);
             });
         }).exceptionally(throwable -> {
@@ -1198,6 +1200,164 @@ public class HomelandManager {
     private void doTeleport(Player player, World world, @org.jetbrains.annotations.Nullable Location location,
                             Consumer<TeleportResult> callback) {
         doTeleportWithResult(player, world, location, callback, TeleportResult.SUCCESS);
+    }
+
+    // ==================== API 加载世界方法 ====================
+
+    /**
+     * API 入口：按 owner UUID + 家园名称加载世界。
+     */
+    public void loadHomelandWorldAPI(UUID ownerUuid, String homelandName, Consumer<LoadWorldResult> callback) {
+        if (branchMode) {
+            plugin.getCrossServerManager().requestLoadWorld(null, ownerUuid, homelandName, null);
+            callback.accept(LoadWorldResult.REQUEST_SENT);
+            return;
+        }
+        getOrLoadHomelandsAsync(ownerUuid, homelands -> {
+            Optional<Homeland> opt = homelands.stream()
+                    .filter(h -> h.getName().equalsIgnoreCase(homelandName))
+                    .findFirst();
+            if (opt.isEmpty()) {
+                callback.accept(LoadWorldResult.WORLD_NOT_FOUND);
+                return;
+            }
+            doLoadHomelandWorld(opt.get(), callback);
+        });
+    }
+
+    /**
+     * API 入口：按 world key 加载世界。
+     */
+    public void loadHomelandWorldByWorldKeyAPI(String worldKey, Consumer<LoadWorldResult> callback) {
+        if (branchMode) {
+            plugin.getCrossServerManager().requestLoadWorld(null, null, null, worldKey);
+            callback.accept(LoadWorldResult.REQUEST_SENT);
+            return;
+        }
+        Homeland homeland = getHomelandByWorldKey(worldKey);
+        if (homeland == null) {
+            callback.accept(LoadWorldResult.WORLD_NOT_FOUND);
+            return;
+        }
+        doLoadHomelandWorld(homeland, callback);
+    }
+
+    /**
+     * API 入口：按 world UUID 加载世界。
+     */
+    public void loadHomelandWorldByWorldUUIDAPI(UUID worldUUID, Consumer<LoadWorldResult> callback) {
+        if (branchMode) {
+            plugin.getCrossServerManager().requestLoadWorld(worldUUID, null, null, null);
+            callback.accept(LoadWorldResult.REQUEST_SENT);
+            return;
+        }
+        Homeland homeland = getHomelandByWorldUUID(worldUUID);
+        if (homeland == null) {
+            callback.accept(LoadWorldResult.WORLD_NOT_FOUND);
+            return;
+        }
+        doLoadHomelandWorld(homeland, callback);
+    }
+
+    private void doLoadHomelandWorld(Homeland homeland, Consumer<LoadWorldResult> callback) {
+        loadHomelandWorldAsync(homeland, world -> {
+            callback.accept(world != null ? LoadWorldResult.SUCCESS : LoadWorldResult.WORLD_LOAD_FAILED);
+        });
+    }
+
+    /**
+     * 供跨服请求使用的加载入口，仅加载世界，无回调。
+     */
+    public void loadHomelandWorldForRequest(Homeland homeland) {
+        loadHomelandWorldAsync(homeland, world -> {
+            if (world != null) {
+                plugin.getLogger().info("跨服加载世界成功: " + homeland.getName() + " (" + homeland.getWorldKey() + ")");
+            } else {
+                plugin.getLogger().warning("跨服加载世界失败: " + homeland.getName() + " (" + homeland.getWorldKey() + ")");
+            }
+        });
+    }
+
+    // ==================== API 查询世界加载状态 ====================
+
+    /**
+     * 检查家园世界是否已加载（同步）。
+     * 主服务器: 本地即时检查，可在任意线程调用。
+     * 分支服务器: 实时查询 Redis / MySQL，MySQL 模式下会阻塞调用线程等待数据库响应。
+     * 如需非阻塞调用，请使用 {@link #isHomelandWorldLoadedAsync}。
+     */
+    public boolean isHomelandWorldLoaded(String worldKey) {
+        if (!branchMode) {
+            return getHomelandWorld(worldKey) != null;
+        }
+        return plugin.getCrossServerManager().isWorldLoadedOnMain(worldKey);
+    }
+
+    /**
+     * 异步检查家园世界是否已加载（通过 world key）。
+     * 主服务器：查本地缓存；分支服务器：异步查询 Redis / MySQL 主服务器状态。
+     */
+    public void isHomelandWorldLoadedAsync(String worldKey, java.util.function.Consumer<Boolean> callback) {
+        if (!branchMode) {
+            callback.accept(getHomelandWorld(worldKey) != null);
+            return;
+        }
+        plugin.getDatabaseQueue().submit("query-world-loaded-" + worldKey, conn -> {
+            return plugin.getCrossServerManager().isWorldLoadedOnMain(worldKey);
+        }, result -> callback.accept(Boolean.TRUE.equals(result)), error -> callback.accept(false));
+    }
+
+    /**
+     * 通知跨服系统更新已加载世界列表。
+     */
+    private void publishLoadedWorlds() {
+        if (plugin.getCrossServerManager() != null) {
+            plugin.getCrossServerManager().publishLoadedWorlds();
+        }
+    }
+
+    /**
+     * 通过世界 UUID 检查家园世界是否已加载（仅主服务器模式）。
+     * 分支模式下本地无缓存，请使用异步版本。
+     */
+    public boolean isHomelandWorldLoadedByUUID(UUID worldUUID) {
+        if (branchMode) return false;
+        Homeland h = getHomelandByWorldUUID(worldUUID);
+        if (h == null) return false;
+        return getHomelandWorld(h.getWorldKey()) != null;
+    }
+
+    /**
+     * 异步检查家园世界是否已加载（通过世界 UUID）。
+     * 主服务器：查本地缓存；分支服务器：先查 DB 获取 worldKey，再查主服务器已加载列表。
+     */
+    public void isHomelandWorldLoadedByUUIDAsync(UUID worldUUID, java.util.function.Consumer<Boolean> callback) {
+        if (!branchMode) {
+            Homeland h = getHomelandByWorldUUID(worldUUID);
+            callback.accept(h != null && getHomelandWorld(h.getWorldKey()) != null);
+            return;
+        }
+        // 分支模式：先查 DB 获取 worldKey，再查主服务器
+        plugin.getDatabaseQueue().submit("query-worldkey-" + worldUUID, conn -> {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT world_key FROM homeland WHERE world_uuid = ?")) {
+                stmt.setString(1, worldUUID.toString());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getString("world_key");
+                    }
+                }
+            } catch (Exception e) {
+                plugin.getLogger().fine("查询世界 key 失败: " + e.getMessage());
+            }
+            return null;
+        }, worldKey -> {
+            if (worldKey == null) {
+                callback.accept(false);
+                return;
+            }
+            callback.accept(plugin.getCrossServerManager().isWorldLoadedOnMain(worldKey));
+        }, error -> callback.accept(false));
     }
 
     // ==================== 扩展边界 ====================
@@ -3205,6 +3365,7 @@ public class HomelandManager {
             provider.levelView().unloadAsync(world, true).thenAccept(success -> {
                 if (success) {
                     plugin.getLogger().info("已自动卸载空闲家园世界: " + world.getName());
+                    Bukkit.getGlobalRegionScheduler().execute(plugin, () -> publishLoadedWorlds());
                 } else {
                     plugin.getLogger().warning("卸载家园世界失败: " + world.getName());
                 }

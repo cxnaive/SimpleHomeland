@@ -12,7 +12,7 @@ libraries:
   - redis.clients:jedis:5.1.3
 
 depend: [PlaceholderAPI]
-softdepend: [Worlds, XConomy, PlayerPoints]
+softdepend: [Worlds, XConomy, PlayerPoints, PlayerWarp]
 
 commands:
   homeland:

@@ -22,6 +22,7 @@ public class RedisManager {
 
     private static final String CHANNEL_PREFIX = "shl:msg:";
     private static final String PLAYERS_PREFIX = "shl:players:";
+    private static final String LOADED_WORLDS_PREFIX = "shl:worlds:";
 
     private final SimpleHomelandPlugin plugin;
     private final Gson gson = new Gson();
@@ -84,11 +85,24 @@ public class RedisManager {
         }
 
         String onlineJson = playersArray.toString();
+
+        // 收集已加载的家园世界 key
+        JsonArray worldsArray = new JsonArray();
+        for (var world : Bukkit.getWorlds()) {
+            var nk = world.getKey();
+            if ("simplehomeland".equals(nk.getNamespace())) {
+                worldsArray.add(nk.getKey());
+            }
+        }
+        String loadedWorldsJson = worldsArray.toString();
+
         ConfigManager config = plugin.getConfigManager();
-        String key = PLAYERS_PREFIX + config.getServerId();
+        String playersKey = PLAYERS_PREFIX + config.getServerId();
+        String worldsKey = LOADED_WORLDS_PREFIX + config.getServerId();
 
         try (Jedis jedis = jedisPool.getResource()) {
-            jedis.setex(key, config.getStaleRequestSeconds(), onlineJson);
+            jedis.setex(playersKey, config.getStaleRequestSeconds(), onlineJson);
+            jedis.setex(worldsKey, config.getStaleRequestSeconds(), loadedWorldsJson);
         } catch (Exception e) {
             plugin.getLogger().warning("Redis 写入心跳失败: " + e.getMessage());
         }
@@ -164,10 +178,10 @@ public class RedisManager {
 
     private void refreshOnlinePlayers() {
         ConfigManager config = plugin.getConfigManager();
-        String key = PLAYERS_PREFIX + config.getMainServer();
+        String playersKey = PLAYERS_PREFIX + config.getMainServer();
 
         try (Jedis jedis = jedisPool.getResource()) {
-            String json = jedis.get(key);
+            String json = jedis.get(playersKey);
             if (json != null && !json.isEmpty()) {
                 Map<UUID, String> newMap = new LinkedHashMap<>();
                 JsonArray arr = JsonParser.parseString(json).getAsJsonArray();
@@ -216,8 +230,55 @@ public class RedisManager {
         }
     }
 
+    public void sendLoadWorldRequest(Map<String, Object> payloadMap) {
+        ConfigManager config = plugin.getConfigManager();
+
+        JsonObject wrapper = new JsonObject();
+        wrapper.addProperty("type", "LOAD_WORLD_REQUEST");
+        wrapper.addProperty("payload", gson.toJson(payloadMap));
+
+        String channel = CHANNEL_PREFIX + config.getMainServer();
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.publish(channel, wrapper.toString());
+        } catch (Exception e) {
+            plugin.getLogger().warning("Redis 发送加载世界请求失败: " + e.getMessage());
+        }
+    }
+
     public Map<UUID, String> getCachedOnlinePlayers() {
         return Collections.unmodifiableMap(cachedOnlinePlayers);
+    }
+
+    /**
+     * 主服务器调用：立即发布已加载世界列表到 Redis。
+     */
+    public void publishLoadedWorlds(String loadedWorldsJson) {
+        ConfigManager config = plugin.getConfigManager();
+        String key = LOADED_WORLDS_PREFIX + config.getServerId();
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.setex(key, config.getStaleRequestSeconds(), loadedWorldsJson);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Redis 发布已加载世界失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 分支服务器调用：直接从 Redis 查询某个世界是否已加载（实时）。
+     */
+    public boolean isWorldLoadedOnMain(String worldKey) {
+        ConfigManager config = plugin.getConfigManager();
+        String key = LOADED_WORLDS_PREFIX + config.getMainServer();
+        try (Jedis jedis = jedisPool.getResource()) {
+            String json = jedis.get(key);
+            if (json == null || json.isEmpty()) return false;
+            JsonArray arr = JsonParser.parseString(json).getAsJsonArray();
+            for (int i = 0; i < arr.size(); i++) {
+                if (worldKey.equals(arr.get(i).getAsString())) return true;
+            }
+        } catch (Exception e) {
+            plugin.getLogger().fine("Redis 查询世界状态失败: " + e.getMessage());
+        }
+        return false;
     }
 
     public void stopOnlineSync() {

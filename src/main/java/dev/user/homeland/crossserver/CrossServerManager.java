@@ -102,16 +102,29 @@ public class CrossServerManager {
         }
 
         String onlineJson = playersArray.toString();
+
+        // 收集已加载的家园世界 key
+        JsonArray worldsArray = new JsonArray();
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            org.bukkit.NamespacedKey nk = world.getKey();
+            if ("simplehomeland".equals(nk.getNamespace())) {
+                worldsArray.add(nk.getKey());
+            }
+        }
+        String loadedWorldsJson = worldsArray.toString();
+
         ConfigManager config = plugin.getConfigManager();
 
         plugin.getDatabaseQueue().submit("heartbeat", conn -> {
             try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO homeland_server_status (server_id, server_mode, online_players, updated_at) " +
-                            "VALUES (?, 'main', ?, CURRENT_TIMESTAMP) " +
-                            "ON DUPLICATE KEY UPDATE server_mode='main', online_players=?, updated_at=CURRENT_TIMESTAMP")) {
+                    "INSERT INTO homeland_server_status (server_id, server_mode, online_players, loaded_worlds, updated_at) " +
+                            "VALUES (?, 'main', ?, ?, CURRENT_TIMESTAMP) " +
+                            "ON DUPLICATE KEY UPDATE server_mode='main', online_players=?, loaded_worlds=?, updated_at=CURRENT_TIMESTAMP")) {
                 ps.setString(1, config.getServerId());
                 ps.setString(2, onlineJson);
-                ps.setString(3, onlineJson);
+                ps.setString(3, loadedWorldsJson);
+                ps.setString(4, onlineJson);
+                ps.setString(5, loadedWorldsJson);
                 ps.executeUpdate();
             } catch (Exception e) {
                 plugin.getLogger().warning("写入心跳失败: " + e.getMessage());
@@ -157,37 +170,74 @@ public class CrossServerManager {
     }
 
     private void handleMessage(String type, String payload) {
-        if ("TELEPORT_REQUEST".equals(type)) {
-            try {
-                JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
-                UUID playerUuid = UUID.fromString(json.get("playerUuid").getAsString());
+        switch (type) {
+            case "TELEPORT_REQUEST" -> handleTeleportRequest(payload);
+            case "LOAD_WORLD_REQUEST" -> handleLoadWorldRequest(payload);
+        }
+    }
+
+    private void handleTeleportRequest(String payload) {
+        try {
+            JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
+            UUID playerUuid = UUID.fromString(json.get("playerUuid").getAsString());
+            UUID ownerUuid = UUID.fromString(json.get("ownerUuid").getAsString());
+            String homelandName = json.get("homelandName").getAsString();
+            boolean bypassAccess = json.has("bypassAccess") && json.get("bypassAccess").getAsBoolean();
+
+            Location targetLocation = null;
+            if (json.has("targetLocation") && !json.get("targetLocation").isJsonNull()) {
+                JsonObject loc = json.getAsJsonObject("targetLocation");
+                targetLocation = new Location(null,
+                        loc.get("x").getAsDouble(), loc.get("y").getAsDouble(), loc.get("z").getAsDouble(),
+                        loc.has("yaw") ? (float) loc.get("yaw").getAsDouble() : 0f,
+                        loc.has("pitch") ? (float) loc.get("pitch").getAsDouble() : 0f);
+            }
+
+            PendingTeleport pt = new PendingTeleport(playerUuid, ownerUuid, homelandName,
+                    bypassAccess, targetLocation, System.currentTimeMillis());
+            plugin.getLogger().info("收到跨服传送请求: " + playerUuid + " -> " + homelandName);
+
+            // 玩家可能已经在线（轮询延迟导致消息晚于玩家到达）
+            Player onlinePlayer = Bukkit.getPlayer(playerUuid);
+            if (onlinePlayer != null) {
+                executeTeleport(onlinePlayer, pt);
+            } else {
+                pendingTeleports.add(pt);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("解析跨服传送请求失败: " + e.getMessage());
+        }
+    }
+
+    private void handleLoadWorldRequest(String payload) {
+        try {
+            JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
+            Homeland homeland = null;
+
+            // 按优先级查找：worldUuid > worldKey > ownerUuid + homelandName
+            if (json.has("worldUuid") && !json.get("worldUuid").isJsonNull()) {
+                UUID worldUuid = UUID.fromString(json.get("worldUuid").getAsString());
+                homeland = plugin.getHomelandManager().getHomelandByWorldUUID(worldUuid);
+            }
+            if (homeland == null && json.has("worldKey") && !json.get("worldKey").isJsonNull()) {
+                String worldKey = json.get("worldKey").getAsString();
+                homeland = plugin.getHomelandManager().getHomelandByWorldKey(worldKey);
+            }
+            if (homeland == null && json.has("ownerUuid") && !json.get("ownerUuid").isJsonNull()) {
                 UUID ownerUuid = UUID.fromString(json.get("ownerUuid").getAsString());
                 String homelandName = json.get("homelandName").getAsString();
-                boolean bypassAccess = json.has("bypassAccess") && json.get("bypassAccess").getAsBoolean();
-
-                Location targetLocation = null;
-                if (json.has("targetLocation") && !json.get("targetLocation").isJsonNull()) {
-                    JsonObject loc = json.getAsJsonObject("targetLocation");
-                    targetLocation = new Location(null,
-                            loc.get("x").getAsDouble(), loc.get("y").getAsDouble(), loc.get("z").getAsDouble(),
-                            loc.has("yaw") ? (float) loc.get("yaw").getAsDouble() : 0f,
-                            loc.has("pitch") ? (float) loc.get("pitch").getAsDouble() : 0f);
-                }
-
-                PendingTeleport pt = new PendingTeleport(playerUuid, ownerUuid, homelandName,
-                        bypassAccess, targetLocation, System.currentTimeMillis());
-                plugin.getLogger().info("收到跨服传送请求: " + playerUuid + " -> " + homelandName);
-
-                // 玩家可能已经在线（轮询延迟导致消息晚于玩家到达）
-                Player onlinePlayer = Bukkit.getPlayer(playerUuid);
-                if (onlinePlayer != null) {
-                    executeTeleport(onlinePlayer, pt);
-                } else {
-                    pendingTeleports.add(pt);
-                }
-            } catch (Exception e) {
-                plugin.getLogger().warning("解析跨服传送请求失败: " + e.getMessage());
+                homeland = plugin.getHomelandManager().findHomeland(ownerUuid, homelandName).orElse(null);
             }
+
+            if (homeland == null) {
+                plugin.getLogger().warning("收到跨服加载世界请求，但未找到对应家园: " + payload);
+                return;
+            }
+
+            plugin.getLogger().info("收到跨服加载世界请求: " + homeland.getName() + " (" + homeland.getWorldKey() + ")");
+            plugin.getHomelandManager().loadHomelandWorldForRequest(homeland);
+        } catch (Exception e) {
+            plugin.getLogger().warning("处理跨服加载世界请求失败: " + e.getMessage());
         }
     }
 
@@ -302,6 +352,38 @@ public class CrossServerManager {
         }
     }
 
+    /**
+     * 分支服务器向主服务器发送加载世界请求。
+     */
+    public void requestLoadWorld(@Nullable UUID worldUuid, @Nullable UUID ownerUuid,
+                                  @Nullable String homelandName, @Nullable String worldKey) {
+        ConfigManager config = plugin.getConfigManager();
+        Map<String, Object> payloadMap = new LinkedHashMap<>();
+        if (worldUuid != null) payloadMap.put("worldUuid", worldUuid.toString());
+        if (ownerUuid != null) payloadMap.put("ownerUuid", ownerUuid.toString());
+        if (homelandName != null) payloadMap.put("homelandName", homelandName);
+        if (worldKey != null) payloadMap.put("worldKey", worldKey);
+
+        if (redisManager != null) {
+            redisManager.sendLoadWorldRequest(payloadMap);
+        } else {
+            String payload = gson.toJson(payloadMap);
+            plugin.getDatabaseQueue().submit("load-world-request", conn -> {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO homeland_messages (source_server_id, target_server_id, message_type, payload) " +
+                                "VALUES (?, ?, 'LOAD_WORLD_REQUEST', ?)")) {
+                    ps.setString(1, config.getServerId());
+                    ps.setString(2, config.getMainServer());
+                    ps.setString(3, payload);
+                    ps.executeUpdate();
+                } catch (Exception e) {
+                    plugin.getLogger().warning("发送跨服加载世界请求失败: " + e.getMessage());
+                }
+                return null;
+            });
+        }
+    }
+
     public void transferToMainServer(Player player) {
         try {
             ByteArrayDataOutput out = ByteStreams.newDataOutput();
@@ -318,7 +400,7 @@ public class CrossServerManager {
         ConfigManager config = plugin.getConfigManager();
         plugin.getDatabaseQueue().submit("sync-online", conn -> {
             try (PreparedStatement ps = conn.prepareStatement(
-                    "SELECT online_players FROM homeland_server_status WHERE server_id = ?")) {
+                    "SELECT online_players, loaded_worlds FROM homeland_server_status WHERE server_id = ?")) {
                 ps.setString(1, config.getMainServer());
                 ResultSet rs = ps.executeQuery();
                 if (rs.next()) {
@@ -350,7 +432,67 @@ public class CrossServerManager {
         return Collections.unmodifiableMap(cachedOnlinePlayers);
     }
 
+    public boolean isWorldLoadedOnMain(String worldKey) {
+        if (redisManager != null) {
+            return redisManager.isWorldLoadedOnMain(worldKey);
+        }
+        return queryLoadedWorldFromDB(worldKey);
+    }
+
+    private boolean queryLoadedWorldFromDB(String worldKey) {
+        ConfigManager config = plugin.getConfigManager();
+        try (var conn = plugin.getDatabaseManager().getConnection();
+             var ps = conn.prepareStatement(
+                     "SELECT loaded_worlds FROM homeland_server_status WHERE server_id = ?")) {
+            ps.setString(1, config.getMainServer());
+            var rs = ps.executeQuery();
+            if (rs.next()) {
+                String json = rs.getString("loaded_worlds");
+                if (json != null && !json.isEmpty()) {
+                    JsonArray arr = JsonParser.parseString(json).getAsJsonArray();
+                    for (int i = 0; i < arr.size(); i++) {
+                        if (worldKey.equals(arr.get(i).getAsString())) return true;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().fine("查询主服务器已加载世界失败: " + e.getMessage());
+        }
+        return false;
+    }
+
     // ==================== Common ====================
+
+    /**
+     * 主服务器调用：立即发布已加载世界列表（用于世界加载/卸载后即时更新）。
+     */
+    public void publishLoadedWorlds() {
+        JsonArray worldsArray = new JsonArray();
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            org.bukkit.NamespacedKey nk = world.getKey();
+            if ("simplehomeland".equals(nk.getNamespace())) {
+                worldsArray.add(nk.getKey());
+            }
+        }
+        String loadedWorldsJson = worldsArray.toString();
+        ConfigManager config = plugin.getConfigManager();
+
+        if (redisManager != null) {
+            redisManager.publishLoadedWorlds(loadedWorldsJson);
+        } else {
+            plugin.getDatabaseQueue().submit("publish-worlds", conn -> {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE homeland_server_status SET loaded_worlds = ? WHERE server_id = ?")) {
+                    ps.setString(1, loadedWorldsJson);
+                    ps.setString(2, config.getServerId());
+                    ps.executeUpdate();
+                } catch (Exception e) {
+                    plugin.getLogger().warning("发布已加载世界失败: " + e.getMessage());
+                }
+                return null;
+            });
+        }
+    }
 
     public void shutdown() {
         if (redisManager != null) {
