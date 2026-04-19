@@ -197,6 +197,31 @@ public class DatabaseManager {
             } catch (SQLException ignored) {
                 // 列已存在，忽略
             }
+
+            // 跨服消息表（仅 MySQL）
+            if (isMySQL) {
+                String messageTable = "CREATE TABLE IF NOT EXISTS homeland_messages (" +
+                        idColumn + "," +
+                        "    source_server_id VARCHAR(64) NOT NULL," +
+                        "    target_server_id VARCHAR(64) NOT NULL," +
+                        "    message_type VARCHAR(32) NOT NULL," +
+                        "    payload TEXT," +
+                        "    created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3)," +
+                        "    processed BOOLEAN DEFAULT FALSE" +
+                        ")";
+                stmt.execute(messageTable);
+                try {
+                    stmt.execute("CREATE INDEX IF NOT EXISTS idx_msg_poll ON homeland_messages (target_server_id, processed, created_at)");
+                } catch (SQLException ignored) {}
+
+                String statusTable = "CREATE TABLE IF NOT EXISTS homeland_server_status (" +
+                        "    server_id VARCHAR(64) PRIMARY KEY," +
+                        "    server_mode VARCHAR(16) NOT NULL," +
+                        "    online_players TEXT," +
+                        "    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
+                        ")";
+                stmt.execute(statusTable);
+            }
         }
     }
 

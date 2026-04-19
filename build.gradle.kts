@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "dev.user"
-version = "1.5.0"
+version = "1.6.0"
 
 repositories {
     mavenCentral()
@@ -39,6 +39,9 @@ dependencies {
 
     // JSON 序列化 (由服务器通过 plugin.yml libraries 加载)
     compileOnly("com.google.code.gson:gson:2.12.1")
+
+    // Redis 客户端 (由服务器通过 plugin.yml libraries 加载)
+    compileOnly("redis.clients:jedis:5.1.3")
 }
 
 tasks.withType<JavaCompile> {

@@ -134,4 +134,57 @@ public final class SimpleHomelandAPI {
         }
         plugin.getHomelandManager().teleportToHomelandByWorldKeyAPI(player, worldKey, bypassAccessCheck, location, callback);
     }
+
+    // ==================== 查询 API ====================
+
+    /**
+     * 异步查询家园是否存在（通过 owner UUID + 名称）。
+     * <p>
+     * 分支模式下通过共享数据库查询，主服务器模式下通过缓存。
+     *
+     * @param ownerUuid    家园所有者的 UUID
+     * @param homelandName 家园名称
+     * @param callback     结果回调，null 表示家园不存在
+     */
+    public static void queryHomelandAsync(UUID ownerUuid, String homelandName,
+                                           Consumer<@Nullable HomelandInfo> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(null);
+            return;
+        }
+        plugin.getHomelandManager().queryHomelandAsync(ownerUuid, homelandName, callback);
+    }
+
+    /**
+     * 异步查询家园是否存在（通过 worldKey）。
+     *
+     * @param worldKey 世界 key
+     * @param callback 结果回调，null 表示家园不存在
+     */
+    public static void queryHomelandByWorldKeyAsync(String worldKey,
+                                                     Consumer<@Nullable HomelandInfo> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(null);
+            return;
+        }
+        plugin.getHomelandManager().queryHomelandByWorldKeyAsync(worldKey, callback);
+    }
+
+    /**
+     * 异步查询家园是否存在（通过世界 UUID）。
+     *
+     * @param worldUUID 世界 UUID（World.getUID()）
+     * @param callback  结果回调，null 表示家园不存在
+     */
+    public static void queryHomelandByWorldUUIDAsync(UUID worldUUID,
+                                                      Consumer<@Nullable HomelandInfo> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(null);
+            return;
+        }
+        plugin.getHomelandManager().queryHomelandByWorldUUIDAsync(worldUUID, callback);
+    }
 }

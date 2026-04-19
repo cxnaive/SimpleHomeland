@@ -88,6 +88,10 @@ public class HomelandManageGUI extends AbstractGUI {
             if (canUnlockNether) {
                 if (isAdmin) {
                     setItem(cfg.getNetherSlot(), createUnlockAdminItem(config, "gui.unlock-nether-item-name"), (p, e) -> {
+                        if (plugin.getConfigManager().isBranchMode()) {
+                            MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                            return;
+                        }
                         plugin.getHomelandManager().unlockNetherAdmin(p, targetUuid, homelandName,
                                 () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
                                 () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
@@ -95,6 +99,10 @@ public class HomelandManageGUI extends AbstractGUI {
                 } else {
                     setItem(cfg.getNetherSlot(), createUnlockItem(config, "gui.unlock-nether-item-name",
                             config.getNetherUnlockMoney(), config.getNetherUnlockPoints()), (p, e) -> {
+                        if (plugin.getConfigManager().isBranchMode()) {
+                            MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                            return;
+                        }
                         plugin.getHomelandManager().unlockNether(p, homelandName,
                                 () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
                                 () -> {});
@@ -120,6 +128,10 @@ public class HomelandManageGUI extends AbstractGUI {
         } else {
             setItem(cfg.getNetherSlot(), createLockDimensionItem(cfg.getNetherLockMaterial(), "gui.lock-nether-item-name",
                     "gui.lock-nether-item-lore", "gui.lock-nether-item-click"), (p, e) -> {
+                if (plugin.getConfigManager().isBranchMode()) {
+                    MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                    return;
+                }
                 pendingLockDimension = "nether";
                 refresh();
             });
@@ -141,11 +153,19 @@ public class HomelandManageGUI extends AbstractGUI {
         // 游戏规则
         if (isAdmin) {
             setItem(cfg.getGameruleSlot(), createGameruleItem(), (p, e) -> {
+                if (plugin.getConfigManager().isBranchMode()) {
+                    MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                    return;
+                }
                 close();
                 HomelandGameRuleGUI.openAdmin(plugin, p, targetUuid, targetName, homelandName);
             });
         } else {
             setItem(cfg.getGameruleSlot(), createGameruleItem(), (p, e) -> {
+                if (plugin.getConfigManager().isBranchMode()) {
+                    MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                    return;
+                }
                 close();
                 HomelandGameRuleGUI.open(plugin, p, homelandName);
             });
@@ -163,6 +183,10 @@ public class HomelandManageGUI extends AbstractGUI {
             if (canUnlockEnd) {
                 if (isAdmin) {
                     setItem(cfg.getEndSlot(), createUnlockAdminItem(config, "gui.unlock-end-item-name"), (p, e) -> {
+                        if (plugin.getConfigManager().isBranchMode()) {
+                            MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                            return;
+                        }
                         plugin.getHomelandManager().unlockEndAdmin(p, targetUuid, homelandName,
                                 () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
                                 () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
@@ -170,6 +194,10 @@ public class HomelandManageGUI extends AbstractGUI {
                 } else {
                     setItem(cfg.getEndSlot(), createUnlockItem(config, "gui.unlock-end-item-name",
                             config.getEndUnlockMoney(), config.getEndUnlockPoints()), (p, e) -> {
+                        if (plugin.getConfigManager().isBranchMode()) {
+                            MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                            return;
+                        }
                         plugin.getHomelandManager().unlockEnd(p, homelandName,
                                 () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
                                 () -> {});
@@ -195,6 +223,10 @@ public class HomelandManageGUI extends AbstractGUI {
         } else {
             setItem(cfg.getEndSlot(), createLockDimensionItem(cfg.getEndLockMaterial(), "gui.lock-end-item-name",
                     "gui.lock-end-item-lore", "gui.lock-end-item-click"), (p, e) -> {
+                if (plugin.getConfigManager().isBranchMode()) {
+                    MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                    return;
+                }
                 pendingLockDimension = "end";
                 refresh();
             });
@@ -247,6 +279,10 @@ public class HomelandManageGUI extends AbstractGUI {
                 });
             } else {
                 setItem(cfg.getExpandSlot(), isAdmin ? createExpandAdminItem(homeland, config) : createExpandBorderItem(homeland, config), (p, e) -> {
+                    if (plugin.getConfigManager().isBranchMode()) {
+                        MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                        return;
+                    }
                     pendingExpand = true;
                     refresh();
                 });
@@ -268,6 +304,10 @@ public class HomelandManageGUI extends AbstractGUI {
 
         // 重置世界按钮
         setItem(cfg.getResetSlot(), createResetItem(), (p, e) -> {
+            if (plugin.getConfigManager().isBranchMode()) {
+                MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                return;
+            }
             close();
             if (isAdmin) {
                 HomelandResetGUI.openAdmin(plugin, p, targetUuid, targetName, homelandName);
@@ -275,6 +315,18 @@ public class HomelandManageGUI extends AbstractGUI {
                 HomelandResetGUI.open(plugin, p, homelandName);
             }
         });
+
+        // 群系更改按钮（仅玩家模式）
+        if (!isAdmin && player.hasPermission("simplehomeland.homeland.biome")) {
+            setItem(cfg.getBiomeSlot(), createBiomeItem(), (p, e) -> {
+                if (plugin.getConfigManager().isBranchMode()) {
+                    MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                    return;
+                }
+                close();
+                HomelandBiomeGUI.open(plugin, p, homelandName);
+            });
+        }
 
         // 删除按钮
         boolean canDelete = isAdmin || player.hasPermission("simplehomeland.homeland.delete");
@@ -300,6 +352,10 @@ public class HomelandManageGUI extends AbstractGUI {
                 });
             } else {
                 setItem(cfg.getDeleteSlot(), createDeleteItem(), (p, e) -> {
+                    if (plugin.getConfigManager().isBranchMode()) {
+                        MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                        return;
+                    }
                     pendingDelete = true;
                     refresh();
                 });
@@ -682,6 +738,23 @@ public class HomelandManageGUI extends AbstractGUI {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
         lore.add(MessageUtil.guiLore(config.getMessage("gui.homeland-item-no-permission")));
+
+        meta.lore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private ItemStack createBiomeItem() {
+        ItemStack item = new ItemStack(cfg.getBiomeMaterial());
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        ConfigManager config = plugin.getConfigManager();
+        meta.displayName(MessageUtil.guiName(config.getMessage("gui.biome-item-name")));
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.biome-item-lore")));
 
         meta.lore(lore);
         item.setItemMeta(meta);

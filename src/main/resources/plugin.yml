@@ -9,9 +9,10 @@ libraries:
   - com.h2database:h2:2.3.232
   - com.mysql:mysql-connector-j:9.2.0
   - com.google.code.gson:gson:2.12.1
+  - redis.clients:jedis:5.1.3
 
-depend: [PlaceholderAPI, Worlds]
-softdepend: [XConomy, PlayerPoints]
+depend: [PlaceholderAPI]
+softdepend: [Worlds, XConomy, PlayerPoints]
 
 commands:
   homeland:
@@ -49,6 +50,9 @@ permissions:
   simplehomeland.homeland.unlock.end:
     default: op
     description: 解锁末地
+  simplehomeland.homeland.biome:
+    default: op
+    description: 更改群系
   simplehomeland.admin:
     default: op
     description: 管理员权限

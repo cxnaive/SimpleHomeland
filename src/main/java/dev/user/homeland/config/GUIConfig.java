@@ -22,6 +22,7 @@ public class GUIConfig {
     private final VisitorFlag visitorFlag;
     private final InviteManage inviteManage;
     private final Reset reset;
+    private final Biome biome;
 
     public GUIConfig(FileConfiguration config) {
         this.global = new Global(safeSection(config, "global"));
@@ -34,6 +35,7 @@ public class GUIConfig {
         this.visitorFlag = new VisitorFlag(safeSection(config, "visitor-flag"));
         this.inviteManage = new InviteManage(safeSection(config, "invite-manage"));
         this.reset = new Reset(safeSection(config, "reset"));
+        this.biome = new Biome(safeSection(config, "biome"));
     }
 
     public Global getGlobal() { return global; }
@@ -46,6 +48,7 @@ public class GUIConfig {
     public VisitorFlag getVisitorFlag() { return visitorFlag; }
     public InviteManage getInviteManage() { return inviteManage; }
     public Reset getReset() { return reset; }
+    public Biome getBiome() { return biome; }
 
     // ==================== 辅助方法 ====================
 
@@ -188,6 +191,8 @@ public class GUIConfig {
         private final Material visitorFlagMaterial;
         private final int resetSlot;
         private final Material resetMaterial;
+        private final int biomeSlot;
+        private final Material biomeMaterial;
 
         public Manage(ConfigurationSection sec) {
             this.size = sec.getInt("size", 54);
@@ -226,6 +231,8 @@ public class GUIConfig {
             this.visitorFlagMaterial = parseMaterial(sec, "visitor-flag-material", "OAK_SIGN");
             this.resetSlot = sec.getInt("reset-slot", 34);
             this.resetMaterial = parseMaterial(sec, "reset-material", "SPONGE");
+            this.biomeSlot = sec.getInt("biome-slot", 25);
+            this.biomeMaterial = parseMaterial(sec, "biome-material", "JUNGLE_SAPLING");
         }
 
         public int getSize() { return size; }
@@ -264,6 +271,8 @@ public class GUIConfig {
         public Material getVisitorFlagMaterial() { return visitorFlagMaterial; }
         public int getResetSlot() { return resetSlot; }
         public Material getResetMaterial() { return resetMaterial; }
+        public int getBiomeSlot() { return biomeSlot; }
+        public Material getBiomeMaterial() { return biomeMaterial; }
     }
 
     // ==================== 创建家园地形选择 GUI ====================
@@ -649,5 +658,48 @@ public class GUIConfig {
         public Material getLockedMaterial() { return lockedMaterial; }
         public Material getConfirmMaterial() { return confirmMaterial; }
         public int getCloseSlot() { return closeSlot; }
+    }
+
+    // ==================== 群系更改 GUI ====================
+
+    public static class Biome {
+        private final int size;
+        private final int itemsPerPage;
+        private final int[] pageSlots;
+        private final int emptySlot;
+        private final int prevSlot;
+        private final int pageInfoSlot;
+        private final int nextSlot;
+        private final int backSlot;
+        private final int closeSlot;
+        private final int currentBiomeSlot;
+        private final Material currentBiomeMaterial;
+
+        public Biome(ConfigurationSection sec) {
+            this.size = sec.getInt("size", 54);
+            this.itemsPerPage = sec.getInt("items-per-page", 28);
+            this.pageSlots = parseIntArray(sec, "page-slots",
+                    new int[]{10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43});
+            this.emptySlot = sec.getInt("empty-slot", 22);
+            this.prevSlot = sec.getInt("prev-slot", 47);
+            this.pageInfoSlot = sec.getInt("page-info-slot", 49);
+            this.nextSlot = sec.getInt("next-slot", 51);
+            this.backSlot = sec.getInt("back-slot", 45);
+            this.closeSlot = sec.getInt("close-slot", 53);
+            this.currentBiomeSlot = sec.getInt("current-biome-slot", 4);
+            this.currentBiomeMaterial = parseMaterial(sec, "current-biome-material", "FILLED_MAP");
+        }
+
+        public int getSize() { return size; }
+        public int getItemsPerPage() { return itemsPerPage; }
+        public int[] getPageSlots() { return pageSlots; }
+        public int getEmptySlot() { return emptySlot; }
+        public int getPrevSlot() { return prevSlot; }
+        public int getPageInfoSlot() { return pageInfoSlot; }
+        public int getNextSlot() { return nextSlot; }
+        public int getBackSlot() { return backSlot; }
+        public int getCloseSlot() { return closeSlot; }
+        public int getCurrentBiomeSlot() { return currentBiomeSlot; }
+        public Material getCurrentBiomeMaterial() { return currentBiomeMaterial; }
     }
 }

@@ -2,6 +2,8 @@ package dev.user.homeland;
 
 import dev.user.homeland.command.HomelandCommand;
 import dev.user.homeland.config.ConfigManager;
+import dev.user.homeland.config.ServerMode;
+import dev.user.homeland.crossserver.CrossServerManager;
 import dev.user.homeland.database.DatabaseManager;
 import dev.user.homeland.database.DatabaseQueue;
 import dev.user.homeland.economy.EconomyManager;
@@ -31,6 +33,7 @@ public class SimpleHomelandPlugin extends JavaPlugin {
     private HomelandManager homelandManager;
     private WorldsProvider worldsProvider;
     private HomelandExpansion homelandExpansion;
+    private CrossServerManager crossServerManager;
 
     @Override
     public void onEnable() {
@@ -39,6 +42,14 @@ public class SimpleHomelandPlugin extends JavaPlugin {
 
         this.configManager = new ConfigManager(this);
         configManager.load();
+
+        // 模式验证：分支模式不支持 H2
+        if (configManager.isBranchMode() && !configManager.getDatabaseType().equalsIgnoreCase("mysql")
+                && !configManager.getDatabaseType().equalsIgnoreCase("mariadb")) {
+            getLogger().severe("分支模式需要 MySQL 数据库！H2 不支持跨服访问！");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         this.databaseManager = new DatabaseManager(this);
         if (!databaseManager.init()) {
@@ -65,17 +76,23 @@ public class SimpleHomelandPlugin extends JavaPlugin {
         this.playerPointsManager = new PlayerPointsManager(this);
         playerPointsManager.init();
 
-        // 获取 Worlds API
-        this.worldsProvider = getServer().getServicesManager().load(WorldsProvider.class);
-        if (worldsProvider == null) {
-            getLogger().severe("未找到 Worlds 插件，插件无法运行！");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
+        boolean isBranchMode = configManager.isBranchMode();
+
+        // 获取 Worlds API（仅主服务器模式需要）
+        if (!isBranchMode) {
+            this.worldsProvider = getServer().getServicesManager().load(WorldsProvider.class);
+            if (worldsProvider == null) {
+                getLogger().severe("未找到 Worlds 插件，主服务器模式无法运行！");
+                getServer().getPluginManager().disablePlugin(this);
+                return;
+            }
         }
 
         // 家园管理器
         this.homelandManager = new HomelandManager(this);
-        homelandManager.startAutoUnloadTask();
+        if (!isBranchMode) {
+            homelandManager.startAutoUnloadTask();
+        }
         for (Player player : getServer().getOnlinePlayers()) {
             homelandManager.onPlayerJoin(player.getUniqueId());
         }
@@ -83,10 +100,12 @@ public class SimpleHomelandPlugin extends JavaPlugin {
         // 事件监听器
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(new GUIListener(), this);
-        getServer().getPluginManager().registerEvents(new TeleportListener(this), this);
-        getServer().getPluginManager().registerEvents(new WorldLoadListener(this), this);
-        getServer().getPluginManager().registerEvents(new HomelandProtectionListener(this), this);
-        getServer().getPluginManager().registerEvents(new CommandBlockListener(this), this);
+        if (!isBranchMode) {
+            getServer().getPluginManager().registerEvents(new TeleportListener(this), this);
+            getServer().getPluginManager().registerEvents(new WorldLoadListener(this), this);
+            getServer().getPluginManager().registerEvents(new HomelandProtectionListener(this), this);
+            getServer().getPluginManager().registerEvents(new CommandBlockListener(this), this);
+        }
 
         // 注册命令
         HomelandCommand cmdExecutor = new HomelandCommand(this);
@@ -109,11 +128,19 @@ public class SimpleHomelandPlugin extends JavaPlugin {
             return;
         }
 
-        getLogger().info("SimpleHomeland 插件已启用！");
+        // 跨服管理器
+        this.crossServerManager = new CrossServerManager(this);
+        crossServerManager.init();
+
+        getLogger().info("SimpleHomeland 插件已启用！" + (isBranchMode ? " (分支模式)" : " (主服务器模式)"));
     }
 
     @Override
     public void onDisable() {
+        if (crossServerManager != null) {
+            crossServerManager.shutdown();
+        }
+
         if (homelandExpansion != null) {
             homelandExpansion.unregister();
         }
@@ -155,4 +182,5 @@ public class SimpleHomelandPlugin extends JavaPlugin {
     public PlayerPointsManager getPlayerPointsManager() { return playerPointsManager; }
     public HomelandManager getHomelandManager() { return homelandManager; }
     public WorldsProvider getWorldsProvider() { return worldsProvider; }
+    public CrossServerManager getCrossServerManager() { return crossServerManager; }
 }

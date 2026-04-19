@@ -32,6 +32,11 @@ public class PlayerListener implements Listener {
         Player player = event.getPlayer();
         plugin.getHomelandManager().onPlayerJoin(player.getUniqueId());
 
+        // 主服务器模式：检查跨服传送请求
+        if (!plugin.getConfigManager().isBranchMode() && plugin.getCrossServerManager() != null) {
+            plugin.getCrossServerManager().onPlayerJoinCheckTeleport(player);
+        }
+
         // 延迟1 tick检查，等待家园数据加载完成
         player.getScheduler().execute(plugin, () -> {
             checkAndEject(player);
@@ -172,22 +177,44 @@ public class PlayerListener implements Listener {
         String homelandName = (String) state[0];
         boolean isUninvite = (Boolean) state[1];
 
-        // 查找目标玩家（在线）
-        Player target = plugin.getServer().getPlayer(input);
-        if (target == null) {
+        // 查找目标玩家
+        UUID targetUuid = null;
+        String targetName = null;
+
+        if (plugin.getConfigManager().isBranchMode()) {
+            // 分支模式：从缓存的在线玩家中查找
+            var cached = plugin.getCrossServerManager().getCachedOnlinePlayers();
+            for (var entry : cached.entrySet()) {
+                if (entry.getValue().equalsIgnoreCase(input)) {
+                    targetUuid = entry.getKey();
+                    targetName = entry.getValue();
+                    break;
+                }
+            }
+        } else {
+            Player target = plugin.getServer().getPlayer(input);
+            if (target != null) {
+                targetUuid = target.getUniqueId();
+                targetName = target.getName();
+            }
+        }
+
+        if (targetUuid == null) {
             MessageUtil.sendAsync(player, config.getMessage("admin-player-not-found", "name", input), plugin);
             return;
         }
 
         plugin.getHomelandManager().finishInviteInput(uuid);
 
+        final UUID finalTargetUuid = targetUuid;
+        final String finalTargetName = targetName;
         if (isUninvite) {
             player.getScheduler().execute(plugin, () -> {
-                plugin.getHomelandManager().uninvitePlayer(player, homelandName, target.getUniqueId(), target.getName(), () -> {}, () -> {});
+                plugin.getHomelandManager().uninvitePlayer(player, homelandName, finalTargetUuid, finalTargetName, () -> {}, () -> {});
             }, () -> {}, 1L);
         } else {
             player.getScheduler().execute(plugin, () -> {
-                plugin.getHomelandManager().invitePlayer(player, homelandName, target.getUniqueId(), target.getName(), () -> {}, () -> {});
+                plugin.getHomelandManager().invitePlayer(player, homelandName, finalTargetUuid, finalTargetName, () -> {}, () -> {});
             }, () -> {}, 1L);
         }
     }

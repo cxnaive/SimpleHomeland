@@ -153,22 +153,33 @@ public class HomelandInviteManageGUI extends AbstractGUI {
 
     // ==================== 在线玩家模式 ====================
 
+    private Map<UUID, String> getOnlinePlayerMap() {
+        if (plugin.getConfigManager().isBranchMode()) {
+            return plugin.getCrossServerManager().getCachedOnlinePlayers();
+        }
+        Map<UUID, String> map = new java.util.LinkedHashMap<>();
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            map.put(p.getUniqueId(), p.getName());
+        }
+        return map;
+    }
+
     private int countAvailableOnlinePlayers(Homeland homeland) {
         int count = 0;
-        for (Player p : plugin.getServer().getOnlinePlayers()) {
-            if (p.getUniqueId().equals(homeland.getOwnerUuid())) continue;
-            if (invitedPlayers != null && invitedPlayers.containsKey(p.getUniqueId())) continue;
+        for (var entry : getOnlinePlayerMap().entrySet()) {
+            if (entry.getKey().equals(homeland.getOwnerUuid())) continue;
+            if (invitedPlayers != null && invitedPlayers.containsKey(entry.getKey())) continue;
             count++;
         }
         return count;
     }
 
     private void populateOnlineMode(Homeland homeland) {
-        List<Player> available = new ArrayList<>();
-        for (Player p : plugin.getServer().getOnlinePlayers()) {
-            if (p.getUniqueId().equals(homeland.getOwnerUuid())) continue;
-            if (invitedPlayers != null && invitedPlayers.containsKey(p.getUniqueId())) continue;
-            available.add(p);
+        List<Map.Entry<UUID, String>> available = new ArrayList<>();
+        for (var entry : getOnlinePlayerMap().entrySet()) {
+            if (entry.getKey().equals(homeland.getOwnerUuid())) continue;
+            if (invitedPlayers != null && invitedPlayers.containsKey(entry.getKey())) continue;
+            available.add(entry);
         }
 
         if (available.isEmpty()) {
@@ -182,23 +193,25 @@ public class HomelandInviteManageGUI extends AbstractGUI {
         for (int i = 0; i < cfg.getItemsPerPage() && i < pageSlots.length; i++) {
             int idx = start + i;
             if (idx >= available.size()) break;
-            Player target = available.get(idx);
-            setItem(pageSlots[i], createOnlinePlayerItem(target), (p, e) -> {
+            Map.Entry<UUID, String> entry = available.get(idx);
+            UUID targetUuid = entry.getKey();
+            String targetName = entry.getValue();
+            setItem(pageSlots[i], createOnlinePlayerItem(targetUuid, targetName), (p, e) -> {
                 if (isAdmin) {
-                    plugin.getHomelandManager().invitePlayerAdmin(p, targetUuid, homelandName,
-                            target.getUniqueId(), target.getName(),
+                    plugin.getHomelandManager().invitePlayerAdmin(p, this.targetUuid, homelandName,
+                            targetUuid, targetName,
                             () -> {
                                 if (invitedPlayers == null) invitedPlayers = new LinkedHashMap<>();
-                                invitedPlayers.put(target.getUniqueId(), target.getName());
+                                invitedPlayers.put(targetUuid, targetName);
                                 p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L);
                             },
                             () -> {});
                 } else {
                     plugin.getHomelandManager().invitePlayer(p, homelandName,
-                            target.getUniqueId(), target.getName(),
+                            targetUuid, targetName,
                             () -> {
                                 if (invitedPlayers == null) invitedPlayers = new LinkedHashMap<>();
-                                invitedPlayers.put(target.getUniqueId(), target.getName());
+                                invitedPlayers.put(targetUuid, targetName);
                                 p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L);
                             },
                             () -> {});
@@ -264,17 +277,17 @@ public class HomelandInviteManageGUI extends AbstractGUI {
     // ==================== 物品创建 ====================
 
     @SuppressWarnings("deprecation")
-    private ItemStack createOnlinePlayerItem(Player target) {
+    private ItemStack createOnlinePlayerItem(UUID targetUuid, String targetName) {
         ItemStack item = new ItemStack(Material.PLAYER_HEAD);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
 
         if (meta instanceof SkullMeta skullMeta) {
-            skullMeta.setOwningPlayer(target);
+            skullMeta.setOwningPlayer(plugin.getServer().getOfflinePlayer(targetUuid));
         }
 
         meta.displayName(MessageUtil.guiName(
-                plugin.getConfigManager().getMessage("gui.invite-manage-player-name", "name", target.getName())));
+                plugin.getConfigManager().getMessage("gui.invite-manage-player-name", "name", targetName)));
 
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));

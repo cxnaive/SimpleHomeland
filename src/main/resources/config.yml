@@ -1,3 +1,29 @@
+# mode: main = 家园主服务器, branch = 分支服务器（仅管理/传送，不托管世界）
+mode: main
+# 本服务器的 Velocity 名称（用于跨服识别）
+server-id: "survival"
+# 主服务器的 Velocity 名称（branch 模式必填，用于跨服传送和消息目标）
+main-server: "survival"
+# 跨服消息轮询间隔（秒）
+poll-interval-seconds: 3
+# 心跳写入间隔（秒）
+heartbeat-interval-seconds: 30
+# 过期请求清理时间（秒）
+stale-request-seconds: 60
+
+# 跨服消息渠道: mysql (轮询) 或 redis (实时，推荐)
+message-channel: mysql
+
+# Redis 配置 (message-channel: redis 时生效)
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  # 数据库索引 (0-15)
+  database: 0
+  # 连接池大小
+  pool-size: 4
+
 database:
   type: h2
   h2:

@@ -86,6 +86,9 @@ manage:
   # 重置世界按钮
   reset-slot: 33
   reset-material: SPONGE
+  # 群系更改按钮
+  biome-slot: 25
+  biome-material: JUNGLE_SAPLING
   # 导航
   back-slot: 45
   close-slot: 53
@@ -224,3 +227,18 @@ reset:
   locked-material: BARRIER
   confirm-material: YELLOW_STAINED_GLASS_PANE
   close-slot: 22
+
+# ==================== 群系更改 GUI ====================
+biome:
+  size: 54
+  items-per-page: 28
+  page-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+  empty-slot: 22
+  prev-slot: 47
+  page-info-slot: 49
+  next-slot: 51
+  back-slot: 45
+  close-slot: 53
+  # 当前群系信息
+  current-biome-slot: 4
+  current-biome-material: FILLED_MAP

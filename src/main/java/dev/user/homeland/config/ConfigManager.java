@@ -6,6 +6,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.GameRule;
 import org.bukkit.GameRules;
 import org.bukkit.Material;
+import org.bukkit.block.Biome;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -75,8 +76,29 @@ public class ConfigManager {
     // GUI 布局配置
     private GUIConfig guiConfig;
 
+    // 群系更改配置
+    private double biomeChangeMoney;
+    private int biomeChangePoints;
+    private List<BiomeEntry> biomeEntries = new ArrayList<>();
+
     // 大厅访客权限
     private VisitorFlags lobbyVisitorFlags;
+
+    // 跨服模式配置
+    private ServerMode serverMode;
+    private String serverId;
+    private String mainServer;
+    private int pollInterval;
+    private int heartbeatInterval;
+    private int staleRequestSeconds;
+
+    // 消息渠道配置
+    private String messageChannel;
+    private String redisHost;
+    private int redisPort;
+    private String redisPassword;
+    private int redisDatabase;
+    private int redisPoolSize;
 
     public ConfigManager(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
@@ -89,6 +111,28 @@ public class ConfigManager {
 
         // 数据库配置
         this.databaseType = config.getString("database.type", "h2");
+
+        // 跨服模式配置
+        String modeStr = config.getString("mode", "main");
+        this.serverMode = modeStr.equalsIgnoreCase("branch") ? ServerMode.BRANCH : ServerMode.MAIN;
+        this.serverId = config.getString("server-id", "survival");
+        this.mainServer = config.getString("main-server", "survival");
+        this.pollInterval = config.getInt("poll-interval-seconds", 3);
+        this.heartbeatInterval = config.getInt("heartbeat-interval-seconds", 30);
+        this.staleRequestSeconds = config.getInt("stale-request-seconds", 60);
+
+        // 消息渠道配置
+        this.messageChannel = config.getString("message-channel", "mysql").toLowerCase();
+        if (!this.messageChannel.equals("mysql") && !this.messageChannel.equals("redis")) {
+            plugin.getLogger().warning("无效的 message-channel 值: " + this.messageChannel + ", 使用默认值 mysql");
+            this.messageChannel = "mysql";
+        }
+        this.redisHost = config.getString("redis.host", "localhost");
+        this.redisPort = config.getInt("redis.port", 6379);
+        this.redisPassword = config.getString("redis.password", "");
+        this.redisDatabase = config.getInt("redis.database", 0);
+        this.redisPoolSize = config.getInt("redis.pool-size", 4);
+
         this.h2Filename = config.getString("database.h2.file", "homeland");
         this.mysqlHost = config.getString("database.mysql.host", "localhost");
         this.mysqlPort = config.getInt("database.mysql.port", 3306);
@@ -162,7 +206,6 @@ public class ConfigManager {
                 ConfigurationSection sec = grSection.getConfigurationSection(key);
                 if (sec == null) continue;
                 boolean enabled = sec.getBoolean("enabled", false);
-                // 只要有 default-value 配置就创建对象（用于世界创建时设置）
                 if (sec.contains("default-value") || enabled) {
                     try {
                         GameRuleConfig grc = new GameRuleConfig(key, sec);
@@ -179,6 +222,7 @@ public class ConfigManager {
 
         loadMessagesConfig();
         loadGUIConfig();
+        loadBiomesConfig();
 
         // 大厅访客权限
         this.lobbyVisitorFlags = VisitorFlags.fromJson(config.getString("lobby-visitor-flags", ""));
@@ -320,6 +364,10 @@ public class ConfigManager {
 
     public GUIConfig getGUIConfig() { return guiConfig; }
 
+    public double getBiomeChangeMoney() { return biomeChangeMoney; }
+    public int getBiomeChangePoints() { return biomeChangePoints; }
+    public List<BiomeEntry> getBiomeEntries() { return Collections.unmodifiableList(biomeEntries); }
+
     public VisitorFlags getLobbyVisitorFlags() { return lobbyVisitorFlags; }
     public void saveLobbyVisitorFlags(VisitorFlags flags) {
         this.lobbyVisitorFlags = flags;
@@ -327,7 +375,70 @@ public class ConfigManager {
         plugin.saveConfig();
     }
 
+    public ServerMode getServerMode() { return serverMode; }
+    public boolean isBranchMode() { return serverMode == ServerMode.BRANCH; }
+    public String getServerId() { return serverId; }
+    public String getMainServer() { return mainServer; }
+    public int getPollInterval() { return pollInterval; }
+    public int getHeartbeatInterval() { return heartbeatInterval; }
+    public int getStaleRequestSeconds() { return staleRequestSeconds; }
+
+    public String getMessageChannel() { return messageChannel; }
+    public boolean isRedisChannel() { return "redis".equals(messageChannel); }
+    public String getRedisHost() { return redisHost; }
+    public int getRedisPort() { return redisPort; }
+    public String getRedisPassword() { return redisPassword; }
+    public int getRedisDatabase() { return redisDatabase; }
+    public int getRedisPoolSize() { return redisPoolSize; }
+
     // ==================== 价格阶梯解析 ====================
+
+    private void loadBiomesConfig() {
+        File biomesFile = new File(plugin.getDataFolder(), "biomes.yml");
+        if (!biomesFile.exists()) {
+            plugin.saveResource("biomes.yml", false);
+        }
+        FileConfiguration biomesYaml = YamlConfiguration.loadConfiguration(biomesFile);
+
+        try (InputStreamReader defaultReader = new InputStreamReader(
+                plugin.getResource("biomes.yml"), StandardCharsets.UTF_8)) {
+            YamlConfiguration defaultConfig = YamlConfiguration.loadConfiguration(defaultReader);
+            biomesYaml.setDefaults(defaultConfig);
+        } catch (Exception e) {
+            plugin.getLogger().warning("加载默认群系配置失败: " + e.getMessage());
+        }
+
+        ConfigurationSection costSection = biomesYaml.getConfigurationSection("biome-change.cost");
+        this.biomeChangeMoney = costSection != null ? costSection.getDouble("money", 100.0) : 100.0;
+        this.biomeChangePoints = costSection != null ? costSection.getInt("points", 0) : 0;
+
+        this.biomeEntries.clear();
+        ConfigurationSection biomesSection = biomesYaml.getConfigurationSection("biomes");
+        if (biomesSection != null) {
+            for (String key : biomesSection.getKeys(false)) {
+                ConfigurationSection sec = biomesSection.getConfigurationSection(key);
+                if (sec == null) continue;
+                try {
+                    @SuppressWarnings("deprecation")
+                    Biome biome = Biome.valueOf(key.toUpperCase());
+                    String name = sec.getString("name", key);
+                    Material material;
+                    try {
+                        material = Material.valueOf(sec.getString("material", "GRASS_BLOCK").toUpperCase());
+                    } catch (IllegalArgumentException e) {
+                        plugin.getLogger().warning("群系 " + key + " 的材质无效: " + e.getMessage());
+                        material = Material.GRASS_BLOCK;
+                    }
+                    List<String> lore = sec.getStringList("lore");
+                    double costOverrideMoney = sec.contains("cost-override.money") ? sec.getDouble("cost-override.money") : -1;
+                    int costOverridePoints = sec.contains("cost-override.points") ? sec.getInt("cost-override.points") : -1;
+                    biomeEntries.add(new BiomeEntry(biome, name, material, lore, costOverrideMoney, costOverridePoints));
+                } catch (IllegalArgumentException e) {
+                    plugin.getLogger().warning("跳过无效的群系: " + key);
+                }
+            }
+        }
+    }
 
     @SuppressWarnings("unchecked")
     private List<PriceTier> parseCreationTiers(List<?> tierList) {
@@ -444,5 +555,34 @@ public class ConfigManager {
         public String getDefaultValue() { return defaultValue; }
         public GameRule<?> getGameRule() { return gameRule; }
         public boolean isBooleanType() { return isBooleanType; }
+    }
+
+    // ==================== BiomeEntry 内部类 ====================
+
+    public static class BiomeEntry {
+        private final Biome biome;
+        private final String name;
+        private final Material material;
+        private final List<String> lore;
+        private final double costOverrideMoney;
+        private final int costOverridePoints;
+
+        public BiomeEntry(Biome biome, String name, Material material, List<String> lore,
+                          double costOverrideMoney, int costOverridePoints) {
+            this.biome = biome;
+            this.name = name;
+            this.material = material;
+            this.lore = lore;
+            this.costOverrideMoney = costOverrideMoney;
+            this.costOverridePoints = costOverridePoints;
+        }
+
+        public Biome getBiome() { return biome; }
+        public String getName() { return name; }
+        public Material getMaterial() { return material; }
+        public List<String> getLore() { return lore; }
+        public double getCostOverrideMoney() { return costOverrideMoney; }
+        public int getCostOverridePoints() { return costOverridePoints; }
+        public boolean hasCostOverride() { return costOverrideMoney >= 0 || costOverridePoints >= 0; }
     }
 }

@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public class HomelandCommand implements CommandExecutor, TabCompleter {
@@ -39,6 +40,29 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
 
     public HomelandCommand(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    private boolean requireMainMode(CommandSender sender) {
+        if (plugin.getConfigManager().isBranchMode()) {
+            sendMessage(sender, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            return false;
+        }
+        return true;
+    }
+
+    private List<String> getOnlinePlayerNames() {
+        if (plugin.getConfigManager().isBranchMode()) {
+            return new ArrayList<>(plugin.getCrossServerManager().getCachedOnlinePlayers().values());
+        }
+        List<String> names = new ArrayList<>();
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            names.add(p.getName());
+        }
+        return names;
+    }
+
+    private boolean isBranchMode() {
+        return plugin.getConfigManager().isBranchMode();
     }
 
     @Override
@@ -81,6 +105,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     // ==================== 玩家命令 ====================
 
     private boolean handleCreate(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         if (!(sender instanceof Player player)) {
             sendMessage(sender, plugin.getConfigManager().getMessage("player-only"));
             return true;
@@ -107,6 +132,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleDelete(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         if (!(sender instanceof Player player)) {
             sendMessage(sender, plugin.getConfigManager().getMessage("player-only"));
             return true;
@@ -219,6 +245,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleBorder(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         if (!(sender instanceof Player player)) {
             sendMessage(sender, plugin.getConfigManager().getMessage("player-only"));
             return true;
@@ -247,6 +274,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleUnlock(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         if (!(sender instanceof Player player)) {
             sendMessage(sender, plugin.getConfigManager().getMessage("player-only"));
             return true;
@@ -288,6 +316,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     // ==================== 删除维度 ====================
 
     private boolean handleLock(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         if (!(sender instanceof Player player)) {
             sendMessage(sender, plugin.getConfigManager().getMessage("player-only"));
             return true;
@@ -451,6 +480,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleAdminCreate(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         // /homeland admin create <玩家> <名称> [default|void|flat]
         if (args.length < 4) {
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-create"));
@@ -489,6 +519,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleAdminDelete(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         // /homeland admin delete <玩家> <名称>
         if (args.length < 4) {
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-delete"));
@@ -545,6 +576,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleAdminBorder(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         // /homeland admin border <玩家> <名称> expand
         if (args.length < 5) {
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-border"));
@@ -586,6 +618,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleAdminUnlock(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         // /homeland admin unlock <玩家> <名称> <nether|end>
         if (args.length < 5) {
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-unlock"));
@@ -628,6 +661,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleAdminLock(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
         // /homeland admin lock <玩家> <名称> <nether|end>
         if (args.length < 5) {
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-lock"));
@@ -738,8 +772,10 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 1) {
             String input = args[0].toLowerCase();
+            Set<String> mainOnly = Set.of("create", "delete", "border", "unlock", "lock");
             for (String sub : SUB_COMMANDS) {
                 if (sub.startsWith(input)) {
+                    if (isBranchMode() && mainOnly.contains(sub)) continue;
                     boolean playerCmd = List.of("create", "delete", "home", "list", "border", "unlock", "lock", "invite", "uninvite", "public", "back").contains(sub);
                     if (playerCmd || sender.hasPermission(PERM_ADMIN)) {
                         completions.add(sub);
@@ -769,9 +805,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                         }
                         // 管理员也补全在线玩家名
                         if (sender.hasPermission(PERM_ADMIN)) {
-                            for (Player p : plugin.getServer().getOnlinePlayers()) {
-                                if (p.getName().toLowerCase().startsWith(input)) {
-                                    completions.add(p.getName());
+                            for (String name : getOnlinePlayerNames()) {
+                                if (name.toLowerCase().startsWith(input)) {
+                                    completions.add(name);
                                 }
                             }
                         }
@@ -783,9 +819,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                 case "list" -> {
                     // /homeland list <玩家> — 管理员补全在线玩家名
                     if (sender.hasPermission(PERM_ADMIN)) {
-                        for (Player p : plugin.getServer().getOnlinePlayers()) {
-                            if (p.getName().toLowerCase().startsWith(input)) {
-                                completions.add(p.getName());
+                        for (String name : getOnlinePlayerNames()) {
+                            if (name.toLowerCase().startsWith(input)) {
+                                completions.add(name);
                             }
                         }
                     }
@@ -801,7 +837,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                 }
                 case "admin" -> {
                     if (sender.hasPermission(PERM_ADMIN)) {
-                        for (String sub : List.of("create", "delete", "tp", "border", "unlock", "lock")) {
+                        List<String> adminSubs = isBranchMode()
+                                ? List.of("tp") : List.of("create", "delete", "tp", "border", "unlock", "lock");
+                        for (String sub : adminSubs) {
                             if (sub.startsWith(input)) {
                                 completions.add(sub);
                             }
@@ -832,9 +870,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
             } else if (subCmd.equals("invite") || subCmd.equals("uninvite")) {
                 // /homeland invite/uninvite <名称> <玩家>
                 String input = args[2].toLowerCase();
-                for (Player p : plugin.getServer().getOnlinePlayers()) {
-                    if (p.getName().toLowerCase().startsWith(input)) {
-                        completions.add(p.getName());
+                for (String name : getOnlinePlayerNames()) {
+                    if (name.toLowerCase().startsWith(input)) {
+                        completions.add(name);
                     }
                 }
             } else if (subCmd.equals("home") && sender.hasPermission(PERM_ADMIN)) {
@@ -854,9 +892,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                     switch (adminSub) {
                         case "create", "delete", "tp", "border", "unlock" -> {
                             String input = args[2].toLowerCase();
-                            for (Player player : plugin.getServer().getOnlinePlayers()) {
-                                if (player.getName().toLowerCase().startsWith(input)) {
-                                    completions.add(player.getName());
+                            for (String name : getOnlinePlayerNames()) {
+                                if (name.toLowerCase().startsWith(input)) {
+                                    completions.add(name);
                                 }
                             }
                         }

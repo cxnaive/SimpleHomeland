@@ -16,6 +16,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -46,25 +47,39 @@ public class HomelandVisitorGUI extends AbstractGUI {
         setItem(cfg.getInfoSlot(), createInfoItem());
 
         // 在线玩家列表（排除自己）
-        List<Player> onlinePlayers = new ArrayList<>(Arrays.asList(
-                plugin.getServer().getOnlinePlayers().toArray(new Player[0])));
-        onlinePlayers.removeIf(p -> p.getUniqueId().equals(player.getUniqueId()));
+        List<UUID> playerUuids = new ArrayList<>();
+        Map<UUID, String> playerNames;
 
-        if (onlinePlayers.isEmpty()) {
+        if (plugin.getConfigManager().isBranchMode()) {
+            playerNames = plugin.getCrossServerManager().getCachedOnlinePlayers();
+        } else {
+            playerNames = new java.util.LinkedHashMap<>();
+            for (Player p : plugin.getServer().getOnlinePlayers()) {
+                playerNames.put(p.getUniqueId(), p.getName());
+            }
+        }
+        playerNames.forEach((uuid, name) -> {
+            if (!uuid.equals(player.getUniqueId())) {
+                playerUuids.add(uuid);
+            }
+        });
+
+        if (playerUuids.isEmpty()) {
             setItem(cfg.getEmptySlot(), createEmptyItem());
         } else {
             int[] pageSlots = cfg.getPageSlots();
             int start = currentPage * cfg.getItemsPerPage();
             for (int i = 0; i < cfg.getItemsPerPage() && i < pageSlots.length; i++) {
                 int idx = start + i;
-                if (idx >= onlinePlayers.size()) break;
-                Player target = onlinePlayers.get(idx);
-                setItem(pageSlots[i], createPlayerItem(target), (p, e) -> {
-                    HomelandVisitorPlayerGUI.open(plugin, p, target.getUniqueId(), target.getName());
+                if (idx >= playerUuids.size()) break;
+                UUID targetUuid = playerUuids.get(idx);
+                String targetName = playerNames.get(targetUuid);
+                setItem(pageSlots[i], createPlayerItem(targetUuid, targetName), (p, e) -> {
+                    HomelandVisitorPlayerGUI.open(plugin, p, targetUuid, targetName);
                 });
             }
 
-            addPageButtons(onlinePlayers.size(), cfg.getItemsPerPage(), cfg.getPagePrevSlot(), cfg.getPageNextSlot());
+            addPageButtons(playerUuids.size(), cfg.getItemsPerPage(), cfg.getPagePrevSlot(), cfg.getPageNextSlot());
         }
 
         // 返回按钮
@@ -80,22 +95,22 @@ public class HomelandVisitorGUI extends AbstractGUI {
     }
 
     @SuppressWarnings("deprecation")
-    private ItemStack createPlayerItem(Player target) {
+    private ItemStack createPlayerItem(UUID targetUuid, String targetName) {
         ItemStack item = new ItemStack(cfg.getPlayerMaterial());
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
 
         if (meta instanceof SkullMeta skullMeta) {
-            skullMeta.setOwningPlayer(target);
+            skullMeta.setOwningPlayer(plugin.getServer().getOfflinePlayer(targetUuid));
         }
 
         ConfigManager config = plugin.getConfigManager();
-        meta.displayName(MessageUtil.guiName(config.getMessage("gui.visitor-player-name", "name", target.getName())));
+        meta.displayName(MessageUtil.guiName(config.getMessage("gui.visitor-player-name", "name", targetName)));
 
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
 
-        List<Homeland> homelands = plugin.getHomelandManager().getHomelands(target.getUniqueId());
+        List<Homeland> homelands = plugin.getHomelandManager().getHomelands(targetUuid);
         lore.add(MessageUtil.guiLore(config.getMessage("gui.visitor-player-homeland-count", "count", String.valueOf(homelands.size()))));
 
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));

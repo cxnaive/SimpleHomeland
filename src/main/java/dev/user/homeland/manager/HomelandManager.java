@@ -1,6 +1,7 @@
 package dev.user.homeland.manager;
 
 import dev.user.homeland.SimpleHomelandPlugin;
+import dev.user.homeland.api.HomelandInfo;
 import dev.user.homeland.api.TeleportResult;
 import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.ConfigManager.GameRuleConfig;
@@ -63,9 +64,12 @@ public class HomelandManager {
     private final ConcurrentHashMap<String, Long> lastPlayerPresentTime = new ConcurrentHashMap<>();
     // API 传送时的权限绕过标记，TeleportListener 会检查此集合
     private final Set<UUID> apiBypass = ConcurrentHashMap.newKeySet();
+    // 是否为分支模式
+    private final boolean branchMode;
 
     public HomelandManager(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
+        this.branchMode = plugin.getConfigManager().isBranchMode();
         loadWorldKeyIndex();
     }
 
@@ -84,6 +88,7 @@ public class HomelandManager {
         namingInProgress.remove(playerUuid);
         inviteInputInProgress.remove(playerUuid);
         adminNamingInProgress.remove(playerUuid);
+        apiBypass.remove(playerUuid);
     }
 
     private void loadHomelands(UUID playerUuid) {
@@ -203,6 +208,15 @@ public class HomelandManager {
                 .findFirst();
     }
 
+    /**
+     * 通过 worldKeyIndex 查找家园（不受玩家缓存限制，启动时即加载全部）。
+     */
+    public Optional<Homeland> findHomeland(UUID ownerUuid, String name) {
+        return worldKeyIndex.values().stream()
+                .filter(h -> h.getOwnerUuid().equals(ownerUuid) && h.getName().equalsIgnoreCase(name))
+                .findFirst();
+    }
+
     public int getHomelandCount(UUID playerUuid) {
         return getHomelands(playerUuid).size();
     }
@@ -270,6 +284,11 @@ public class HomelandManager {
 
     private void createHomelandInternal(CommandSender messageTarget, UUID ownerUuid,
                                          String name, String worldTypeKey, boolean skipEconomy, Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         ConfigManager config = plugin.getConfigManager();
 
         // 检查名称长度
@@ -521,6 +540,11 @@ public class HomelandManager {
     private void deleteHomelandCommon(CommandSender messageTarget, Homeland homeland,
                                        String successMsgKey, String taskName,
                                        Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         UUID ownerUuid = homeland.getOwnerUuid();
 
         Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
@@ -653,14 +677,21 @@ public class HomelandManager {
             }
 
             Homeland homeland = optHomeland.get();
-            World world = getHomelandWorld(homeland.getWorldKey());
 
-            if (world != null) {
-                // 世界已加载，直接传送
-                teleportToWorld(teleporter, homeland, world);
+            if (branchMode) {
+                teleportToHomelandInternal(teleporter, homeland, homeland.getWorldKey(),
+                        false, null, result -> {
+                            if (result == TeleportResult.ACCESS_DENIED) {
+                                sendAsyncMessage(teleporter, plugin.getConfigManager().getMessage("world-access-denied"));
+                            }
+                        });
             } else {
-                // 尝试通过 Worlds API 加载世界
-                loadAndTeleport(teleporter, homeland);
+                World world = getHomelandWorld(homeland.getWorldKey());
+                if (world != null) {
+                    teleportToWorld(teleporter, homeland, world);
+                } else {
+                    loadAndTeleport(teleporter, homeland);
+                }
             }
         });
     }
@@ -669,12 +700,19 @@ public class HomelandManager {
      * 将玩家传送回服务器主世界出生点。
      */
     public void teleportToMainWorld(Player player) {
+        if (branchMode) {
+            sendAsyncMessage(player, plugin.getConfigManager().getMessage("back-to-main-world"));
+            plugin.getCrossServerManager().transferToMainServer(player);
+            return;
+        }
         org.bukkit.World mainWorld = plugin.getServer().getWorlds().get(0);
         player.getScheduler().execute(plugin, () -> {
             player.teleportAsync(mainWorld.getSpawnLocation());
             sendAsyncMessage(player, plugin.getConfigManager().getMessage("back-to-main-world"));
         }, null, 1L);
     }
+
+
 
     private void teleportToWorld(Player teleporter, Homeland homeland, World world) {
         // 先检查访问权限，避免发出"正在传送"消息后又被 TeleportListener 拦截
@@ -687,7 +725,7 @@ public class HomelandManager {
         teleporter.getScheduler().execute(plugin, () -> teleporter.teleportAsync(world.getSpawnLocation()), null, 1L);
     }
 
-    private void loadAndTeleport(Player teleporter, Homeland homeland) {
+    public void loadAndTeleport(Player teleporter, Homeland homeland) {
         sendAsyncMessage(teleporter, plugin.getConfigManager().getMessage("world-loading"));
         loadHomelandWorldAsync(homeland, world -> {
             if (world == null) {
@@ -695,6 +733,29 @@ public class HomelandManager {
                 return;
             }
             teleportToWorld(teleporter, homeland, world);
+        });
+    }
+
+    /**
+     * 加载家园世界并传送，传送完成后移除 apiBypass 标记（跨服 API 用）。
+     */
+    public void loadAndTeleportWithBypass(Player teleporter, Homeland homeland, boolean bypassAccess) {
+        if (!bypassAccess) {
+            loadAndTeleport(teleporter, homeland);
+            return;
+        }
+        sendAsyncMessage(teleporter, plugin.getConfigManager().getMessage("world-loading"));
+        loadHomelandWorldAsync(homeland, world -> {
+            if (world == null) {
+                apiBypass.remove(teleporter.getUniqueId());
+                sendAsyncMessage(teleporter, plugin.getConfigManager().getMessage("world-not-loaded"));
+                return;
+            }
+            teleporter.getScheduler().execute(plugin, () -> {
+                teleporter.teleportAsync(world.getSpawnLocation()).thenAccept(success -> {
+                    apiBypass.remove(teleporter.getUniqueId());
+                });
+            }, () -> apiBypass.remove(teleporter.getUniqueId()), 1L);
         });
     }
 
@@ -710,6 +771,13 @@ public class HomelandManager {
      * @param targetWorldKey 实际要加载的世界 key（可以是主世界、_nether、_the_end）
      */
     private void loadHomelandWorldAsync(String targetWorldKey, Homeland homeland, Consumer<World> callback) {
+        World existing = getHomelandWorld(targetWorldKey);
+        if (existing != null) {
+            touchLastPlayerTime(targetWorldKey);
+            callback.accept(existing);
+            return;
+        }
+
         WorldsProvider provider = plugin.getWorldsProvider();
         if (provider == null) {
             callback.accept(null);
@@ -829,6 +897,21 @@ public class HomelandManager {
             return;
         }
 
+        // 分支模式：查数据库查找家园
+        if (branchMode) {
+            plugin.getLogger().info("[API] teleportByWorldUUID: branch mode, querying DB");
+            queryHomelandByWorldUUIDAsync(worldUUID, info -> {
+                if (info == null) {
+                    callback.accept(TeleportResult.WORLD_NOT_FOUND);
+                    return;
+                }
+                Homeland h = new Homeland(0, info.ownerUuid(), info.name(), info.worldKey(),
+                        info.borderRadius(), info.hasNether(), info.hasEnd(), info.isPublic(), null);
+                teleportToHomelandInternal(player, h, info.worldKey(), bypassAccessCheck, location, callback);
+            });
+            return;
+        }
+
         // 非家园世界，尝试按 Bukkit UUID 查找
         plugin.getLogger().info("[API] teleportByWorldUUID: index miss, falling back to Bukkit.getWorld");
         World bukkitWorld = Bukkit.getWorld(worldUUID);
@@ -867,6 +950,21 @@ public class HomelandManager {
             return;
         }
 
+        // 分支模式：查数据库查找家园
+        if (branchMode) {
+            plugin.getLogger().info("[API] teleportByWorldKey: branch mode, querying DB");
+            queryHomelandByWorldKeyAsync(worldKey, info -> {
+                if (info == null) {
+                    callback.accept(TeleportResult.WORLD_NOT_FOUND);
+                    return;
+                }
+                Homeland h = new Homeland(0, info.ownerUuid(), info.name(), info.worldKey(),
+                        info.borderRadius(), info.hasNether(), info.hasEnd(), info.isPublic(), null);
+                teleportToHomelandInternal(player, h, worldKey, bypassAccessCheck, location, callback);
+            });
+            return;
+        }
+
         // 非家园世界，尝试按 Bukkit 名称查找
         plugin.getLogger().info("[API] teleportByWorldKey: index miss, falling back to Bukkit.getWorld");
         World bukkitWorld = Bukkit.getWorld(worldKey);
@@ -886,6 +984,18 @@ public class HomelandManager {
     private void teleportToHomelandInternal(Player player, Homeland homeland, String targetWorldKey,
                                              boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
                                              Consumer<TeleportResult> callback) {
+        if (branchMode) {
+            plugin.getLogger().info("[API] branch teleport: player=" + player.getName()
+                    + ", worldKey=" + targetWorldKey + ", bypass=" + bypassAccessCheck);
+            if (!bypassAccessCheck && !canEnterWorld(player, targetWorldKey)) {
+                callback.accept(TeleportResult.ACCESS_DENIED);
+                return;
+            }
+            plugin.getCrossServerManager().requestTeleport(
+                    player, homeland.getOwnerUuid(), homeland.getName(), bypassAccessCheck, location);
+            callback.accept(TeleportResult.SUCCESS);
+            return;
+        }
         plugin.getLogger().info("[API] internal: player=" + player.getName()
                 + ", worldKey=" + targetWorldKey + ", bypass=" + bypassAccessCheck);
         if (!bypassAccessCheck && !canEnterWorld(player, targetWorldKey)) {
@@ -949,6 +1059,139 @@ public class HomelandManager {
         return apiBypass.contains(playerUuid);
     }
 
+    public void addApiBypass(UUID playerUuid) {
+        apiBypass.add(playerUuid);
+    }
+
+    public void removeApiBypass(UUID playerUuid) {
+        apiBypass.remove(playerUuid);
+    }
+
+    // ==================== 跨服查询 API ====================
+
+    /**
+     * 异步查询家园是否存在（通过 owner UUID + 名称）。
+     * 分支模式下通过共享数据库查询，主服务器模式下通过缓存。
+     */
+    public void queryHomelandAsync(UUID ownerUuid, String name, java.util.function.Consumer<HomelandInfo> callback) {
+        getOrLoadHomelandsAsync(ownerUuid, homelands -> {
+            Optional<Homeland> opt = homelands.stream()
+                    .filter(h -> h.getName().equalsIgnoreCase(name))
+                    .findFirst();
+            callback.accept(opt.map(this::toHomelandInfo).orElse(null));
+        }, () -> callback.accept(null));
+    }
+
+    /**
+     * 异步查询家园是否存在（通过 worldKey）。
+     */
+    public void queryHomelandByWorldKeyAsync(String worldKey, java.util.function.Consumer<HomelandInfo> callback) {
+        Homeland cached = worldKeyIndex.get(worldKey);
+        if (cached != null) {
+            callback.accept(toHomelandInfo(cached));
+            return;
+        }
+        // 缓存未命中，查数据库
+        plugin.getDatabaseQueue().submit("query-homeland-key-" + worldKey, conn -> {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public FROM homeland WHERE world_key = ?")) {
+                stmt.setString(1, worldKey);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        String worldUuidStr = rs.getString("world_uuid");
+                        return new HomelandInfo(
+                                UUID.fromString(rs.getString("owner_uuid")),
+                                rs.getString("name"),
+                                rs.getString("world_key"),
+                                worldUuidStr != null ? UUID.fromString(worldUuidStr) : null,
+                                rs.getInt("border_radius"),
+                                rs.getBoolean("has_nether"),
+                                rs.getBoolean("has_end"),
+                                rs.getBoolean("is_public")
+                        );
+                    }
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("查询家园(worldKey)失败: " + e.getMessage());
+            }
+            return null;
+        }, callback, error -> {
+            plugin.getLogger().warning("查询家园(worldKey)失败: " + error.getMessage());
+            callback.accept(null);
+        });
+    }
+
+    /**
+     * 异步查询家园是否存在（通过世界 UUID）。
+     */
+    public void queryHomelandByWorldUUIDAsync(UUID worldUUID, java.util.function.Consumer<HomelandInfo> callback) {
+        Homeland cached = worldUuidIndex.get(worldUUID);
+        if (cached != null) {
+            callback.accept(toHomelandInfo(cached));
+            return;
+        }
+        // 缓存未命中，查数据库
+        plugin.getDatabaseQueue().submit("query-homeland-uuid-" + worldUUID, conn -> {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public FROM homeland WHERE world_uuid = ?")) {
+                stmt.setString(1, worldUUID.toString());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        String worldUuidStr = rs.getString("world_uuid");
+                        return new HomelandInfo(
+                                UUID.fromString(rs.getString("owner_uuid")),
+                                rs.getString("name"),
+                                rs.getString("world_key"),
+                                worldUuidStr != null ? UUID.fromString(worldUuidStr) : null,
+                                rs.getInt("border_radius"),
+                                rs.getBoolean("has_nether"),
+                                rs.getBoolean("has_end"),
+                                rs.getBoolean("is_public")
+                        );
+                    }
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("查询家园(worldUUID)失败: " + e.getMessage());
+            }
+            return null;
+        }, callback, error -> {
+            plugin.getLogger().warning("查询家园(worldUUID)失败: " + error.getMessage());
+            callback.accept(null);
+        });
+    }
+
+    private HomelandInfo toHomelandInfo(Homeland h) {
+        return new HomelandInfo(h.getOwnerUuid(), h.getName(), h.getWorldKey(), h.getWorldUuid(),
+                h.getBorderRadius(), h.hasNether(), h.hasEnd(), h.isPublic());
+    }
+
+    /**
+     * 加载家园世界并传送到指定坐标（跨服 API 用）。
+     * bypass 时由调用方负责 addApiBypass，本方法负责 removeApiBypass。
+     */
+    public void loadHomelandWorldAndTeleport(Player player, Homeland homeland, Location targetLocation,
+                                             boolean bypassAccess) {
+        if (!bypassAccess && !canEnterWorld(player, homeland.getWorldKey())) {
+            sendAsyncMessage(player, plugin.getConfigManager().getMessage("world-access-denied"));
+            return;
+        }
+        sendAsyncMessage(player, plugin.getConfigManager().getMessage("world-loading"));
+        loadHomelandWorldAsync(homeland, world -> {
+            if (world == null) {
+                if (bypassAccess) apiBypass.remove(player.getUniqueId());
+                sendAsyncMessage(player, plugin.getConfigManager().getMessage("world-not-loaded"));
+                return;
+            }
+            Location target = new Location(world, targetLocation.getX(), targetLocation.getY(), targetLocation.getZ(),
+                    targetLocation.getYaw(), targetLocation.getPitch());
+            player.getScheduler().execute(plugin, () -> {
+                player.teleportAsync(target).thenAccept(success -> {
+                    if (bypassAccess) apiBypass.remove(player.getUniqueId());
+                });
+            }, () -> { if (bypassAccess) apiBypass.remove(player.getUniqueId()); }, 1L);
+        });
+    }
+
     /**
      * 执行实际传送（家园世界），成功回调 SUCCESS。传送到指定位置，null 则用出生点。
      */
@@ -968,6 +1211,11 @@ public class HomelandManager {
     }
 
     private void expandBorderInternal(CommandSender messageTarget, UUID ownerUuid, String name, boolean skipEconomy, @org.jetbrains.annotations.Nullable Player economyPlayer, Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
 
         if (optHomeland.isEmpty()) {
@@ -1083,6 +1331,11 @@ public class HomelandManager {
     }
 
     private void unlockNetherInternal(CommandSender messageTarget, UUID ownerUuid, String name, boolean skipEconomy, @org.jetbrains.annotations.Nullable Player economyPlayer, Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
 
         if (optHomeland.isEmpty()) {
@@ -1216,6 +1469,11 @@ public class HomelandManager {
     }
 
     private void unlockEndInternal(CommandSender messageTarget, UUID ownerUuid, String name, boolean skipEconomy, @org.jetbrains.annotations.Nullable Player economyPlayer, Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
 
         if (optHomeland.isEmpty()) {
@@ -1358,6 +1616,11 @@ public class HomelandManager {
 
     private void lockDimensionInternal(CommandSender messageTarget, UUID ownerUuid, String name,
                                        String dimension, Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
@@ -1461,6 +1724,11 @@ public class HomelandManager {
 
     private void resetOverworldInternal(CommandSender messageTarget, UUID ownerUuid, String name,
                                         String worldTypeKey, boolean isAdmin, Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
@@ -1790,6 +2058,11 @@ public class HomelandManager {
 
     private void resetDimensionInternal(CommandSender messageTarget, UUID ownerUuid, String name,
                                         String dimension, boolean isAdmin, Runnable onSuccess, Runnable onFailure) {
+        if (branchMode) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("branch-mode-not-allowed"));
+            onFailure.run();
+            return;
+        }
         Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
@@ -2003,7 +2276,7 @@ public class HomelandManager {
 
     // ==================== 经济检查与扣费 ====================
 
-    private boolean checkAndWithdrawEconomy(Player player, double money, int points) {
+    public boolean checkAndWithdrawEconomy(Player player, double money, int points) {
         ConfigManager config = plugin.getConfigManager();
 
         // 如果需要金币但经济插件未安装，拒绝操作
@@ -2041,7 +2314,7 @@ public class HomelandManager {
         return true;
     }
 
-    private void refundEconomy(Player economyPlayer, double money, int points) {
+    public void refundEconomy(Player economyPlayer, double money, int points) {
         if (economyPlayer == null) return;
         if (money > 0 && plugin.getEconomyManager().isEnabled()) {
             boolean success = plugin.getEconomyManager().deposit(economyPlayer.getUniqueId(), economyPlayer.getName(), money);

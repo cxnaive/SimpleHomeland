@@ -80,6 +80,10 @@ public class HomelandGUI extends AbstractGUI {
         if (ownHomelands.size() < config.getMaxHomelands()
                 && player.hasPermission("simplehomeland.homeland.create")) {
             setItem(cfg.getCreateSlot(), createCreateItem(), (p, e) -> {
+                if (plugin.getConfigManager().isBranchMode()) {
+                    MessageUtil.send(p, plugin.getConfigManager().getMessage("branch-mode-gui"));
+                    return;
+                }
                 close();
                 plugin.getHomelandManager().startNaming(p.getUniqueId());
                 MessageUtil.send(p, config.getMessage("gui.create-enter-name"));

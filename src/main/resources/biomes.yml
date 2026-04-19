@@ -1,0 +1,80 @@
+# 群系更改功能配置
+
+biome-change:
+  cost:
+    money: 100.0
+    points: 0
+
+# 可用群系列表
+# key = Bukkit Biome 枚举名称 (必须匹配 org.bukkit.block.Biome)
+# name = GUI 中的显示名称
+# material = GUI 图标材质
+# lore = 可选描述行列表
+# cost-override: 可选，覆盖默认费用
+biomes:
+  PLAINS:
+    name: "平原"
+    material: GRASS_BLOCK
+  DESERT:
+    name: "沙漠"
+    material: SAND
+  FOREST:
+    name: "森林"
+    material: OAK_LOG
+  BIRCH_FOREST:
+    name: "桦木森林"
+    material: BIRCH_LOG
+  TAIGA:
+    name: "针叶林"
+    material: SPRUCE_LOG
+  JUNGLE:
+    name: "丛林"
+    material: JUNGLE_LOG
+  SNOWY_PLAINS:
+    name: "雪原"
+    material: SNOW_BLOCK
+  MUSHROOM_FIELDS:
+    name: "蘑菇岛"
+    material: MYCELIUM
+  CHERRY_GROVE:
+    name: "樱花树林"
+    material: CHERRY_LEAVES
+  FLOWER_FOREST:
+    name: "繁花森林"
+    material: ROSE_BUSH
+  MEADOW:
+    name: "草甸"
+    material: CORNFLOWER
+  GROVE:
+    name: "雪林"
+    material: SNOW
+  FROZEN_PEAKS:
+    name: "冰封山峰"
+    material: PACKED_ICE
+  OCEAN:
+    name: "海洋"
+    material: PRISMARINE
+  MANGROVE_SWAMP:
+    name: "红树林沼泽"
+    material: MANGROVE_ROOTS
+  SWAMP:
+    name: "沼泽"
+    material: LILY_PAD
+  BADLANDS:
+    name: "恶地"
+    material: RED_SAND
+  DEEP_DARK:
+    name: "深暗之域"
+    material: SCULK
+  ICE_SPIKES:
+    name: "冰刺之地"
+    material: ICE
+  DARK_FOREST:
+    name: "黑森林"
+    material: DARK_OAK_LOG
+  SAVANNA:
+    name: "热带草原"
+    material: ACACIA_LOG
+  WINDSWEPT_HILLS:
+    name: "风蚀丘陵"
+    material: STONE
