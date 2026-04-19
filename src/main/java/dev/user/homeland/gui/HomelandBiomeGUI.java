@@ -118,7 +118,7 @@ public class HomelandBiomeGUI extends AbstractGUI {
 
         // 检查是否在 nether/end 维度
         if (worldKey.endsWith("_nether") || worldKey.endsWith("_the_end")) {
-            MessageUtil.send(player, config.getMessage("biome-not-in-overworld"));
+            MessageUtil.send(player, config.getMessage("gui.biome-not-in-overworld"));
             pendingBiome = null;
             refresh();
             return;
@@ -126,14 +126,14 @@ public class HomelandBiomeGUI extends AbstractGUI {
 
         Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(worldKey);
         if (homeland == null) {
-            MessageUtil.send(player, config.getMessage("biome-not-in-homeland"));
+            MessageUtil.send(player, config.getMessage("gui.biome-not-in-homeland"));
             pendingBiome = null;
             refresh();
             return;
         }
 
         if (!homeland.getOwnerUuid().equals(player.getUniqueId())) {
-            MessageUtil.send(player, config.getMessage("biome-not-owner"));
+            MessageUtil.send(player, config.getMessage("gui.biome-not-owner"));
             pendingBiome = null;
             refresh();
             return;
@@ -142,7 +142,7 @@ public class HomelandBiomeGUI extends AbstractGUI {
         // 检查是否已经是该群系
         Biome currentBiome = world.getBiome(player.getLocation());
         if (currentBiome == entry.getBiome()) {
-            MessageUtil.send(player, config.getMessage("biome-already-same", "biome", entry.getName()));
+            MessageUtil.send(player, config.getMessage("gui.biome-already-same", "biome", entry.getName()));
             pendingBiome = null;
             refresh();
             return;
@@ -180,13 +180,13 @@ public class HomelandBiomeGUI extends AbstractGUI {
 
             world.refreshChunk(chunkX, chunkZ);
 
-            MessageUtil.send(player, config.getMessage("biome-success", "biome", entry.getName()));
+            MessageUtil.send(player, config.getMessage("gui.biome-success", "biome", entry.getName()));
             close();
         } catch (Exception e) {
             plugin.getLogger().warning("更改群系失败: " + e.getMessage());
             // 退还费用
             plugin.getHomelandManager().refundEconomy(player, money, points);
-            MessageUtil.send(player, config.getMessage("biome-failed"));
+            MessageUtil.send(player, config.getMessage("gui.biome-failed"));
             pendingBiome = null;
             refresh();
         }
