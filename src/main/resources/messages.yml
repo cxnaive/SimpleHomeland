@@ -8,7 +8,7 @@ homeland-list-entry: "&7{index}. &e{name} &7(边界: {border})"
 homeland-not-found: "&c未找到家园 &e{name}&c。"
 homeland-limit-reached: "&c你已达到家园数量上限({max})！"
 homeland-name-invalid: "&c家园名称只能包含中文、字母、数字和下划线，长度2-32个字符。"
-homeland-name-exists: "&c你已经有一个名为 &e{name} &c的家园了。"
+homeland-name-exists: "&c已存在名为 &e{name} &c的家园。"
 no-permission: "&c你没有权限执行此操作。"
 no-gui-permission: "&c你没有权限使用家园菜单。"
 not-enough-money: "&c你需要 {money} 金币才能执行此操作。"
@@ -341,3 +341,8 @@ branch-mode-gui: "&c此操作仅限主服务器，请在主服务器上执行。
 branch-teleporting: "&a正在将你传送到主服务器..."
 branch-transfer-failed: "&c跨服传送失败，请稍后再试。"
 redis-connect-failed: "&cRedis 连接失败: {error}"
+
+# PlayerWarp 集成
+playerwarp-world-loading: "&a正在加载家园世界，请稍候..."
+playerwarp-world-load-failed: "&c家园世界加载失败，请联系管理员"
+playerwarp-branch-not-supported: "&c跨服模式下请先通过 &e/hl home &c进入家园世界"

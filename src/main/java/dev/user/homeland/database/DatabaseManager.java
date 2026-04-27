@@ -106,6 +106,14 @@ public class DatabaseManager {
                     ")";
             stmt.execute(homelandTable);
 
+            // 迁移：添加 name 全局唯一约束（家园名称全局唯一）
+            try {
+                stmt.execute("ALTER TABLE homeland ADD CONSTRAINT homeland_name_unique UNIQUE (name)");
+                plugin.getLogger().info("已添加 name 全局唯一约束");
+            } catch (SQLException e) {
+                // 约束已存在，忽略
+            }
+
             // 迁移：为已有表添加 world_uuid 列
             try {
                 stmt.execute("ALTER TABLE homeland ADD COLUMN world_uuid VARCHAR(36)");

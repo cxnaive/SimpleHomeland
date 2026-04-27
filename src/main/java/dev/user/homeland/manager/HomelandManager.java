@@ -324,8 +324,8 @@ public class HomelandManager {
             return;
         }
 
-        // 检查重名
-        if (getHomeland(ownerUuid, name).isPresent()) {
+        // 检查全局重名（家园名称全局唯一）
+        if (findHomelandByName(name) != null) {
             messageTarget.sendMessage(MessageUtil.toComponent(config.getMessage("homeland-name-exists", "name", name)));
             lockedOnFailure.run();
             return;
@@ -763,7 +763,7 @@ public class HomelandManager {
     /**
      * 异步加载家园世界。加载成功后回调 World（主线程），失败回调 null。
      */
-    private void loadHomelandWorldAsync(Homeland homeland, Consumer<World> callback) {
+    public void loadHomelandWorldAsync(Homeland homeland, Consumer<World> callback) {
         loadHomelandWorldAsync(homeland.getWorldKey(), homeland, callback);
     }
 
@@ -2683,6 +2683,20 @@ public class HomelandManager {
 
     public Homeland getHomelandByWorldUUID(UUID worldUuid) {
         return worldUuidIndex.get(worldUuid);
+    }
+
+    public ConcurrentHashMap<String, Homeland> getWorldKeyIndex() {
+        return worldKeyIndex;
+    }
+
+    /**
+     * 按家园名称全局查找（名称全局唯一）。
+     */
+    public Homeland findHomelandByName(String name) {
+        for (Homeland h : worldKeyIndex.values()) {
+            if (h.getName().equals(name)) return h;
+        }
+        return null;
     }
 
     /**
