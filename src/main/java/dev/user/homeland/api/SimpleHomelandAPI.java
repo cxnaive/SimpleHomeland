@@ -135,6 +135,43 @@ public final class SimpleHomelandAPI {
         plugin.getHomelandManager().teleportToHomelandByWorldKeyAPI(player, worldKey, bypassAccessCheck, location, callback);
     }
 
+    /**
+     * 将玩家传送到指定家园（出生点），通过家园名称查找（全局唯一）。
+     * <p>
+     * 支持未加载的家园世界（会自动异步加载）。
+     *
+     * @param player           要传送的玩家
+     * @param worldName        家园名称（即 world.getName()，全局唯一）
+     * @param bypassAccessCheck 是否跳过访问权限检查
+     * @param callback         结果回调（主线程）
+     */
+    public static void teleportToHomelandByWorldName(Player player, String worldName,
+                                                      boolean bypassAccessCheck, Consumer<TeleportResult> callback) {
+        teleportToHomelandByWorldName(player, worldName, bypassAccessCheck, null, callback);
+    }
+
+    /**
+     * 将玩家传送到指定家园的指定位置，通过家园名称查找（全局唯一）。
+     * <p>
+     * 支持未加载的家园世界（会自动异步加载）。
+     *
+     * @param player           要传送的玩家
+     * @param worldName        家园名称（即 world.getName()，全局唯一）
+     * @param bypassAccessCheck 是否跳过访问权限检查
+     * @param location         目标位置，null 则传送到出生点
+     * @param callback         结果回调（主线程）
+     */
+    public static void teleportToHomelandByWorldName(Player player, String worldName,
+                                                      boolean bypassAccessCheck, @Nullable Location location,
+                                                      Consumer<TeleportResult> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(TeleportResult.WORLD_NOT_FOUND);
+            return;
+        }
+        plugin.getHomelandManager().teleportToHomelandByWorldNameAPI(player, worldName, bypassAccessCheck, location, callback);
+    }
+
     // ==================== 查询 API ====================
 
     /**
@@ -170,6 +207,22 @@ public final class SimpleHomelandAPI {
             return;
         }
         plugin.getHomelandManager().queryHomelandByWorldKeyAsync(worldKey, callback);
+    }
+
+    /**
+     * 异步查询家园是否存在（通过家园名称，全局唯一）。
+     *
+     * @param worldName 家园名称（即 world.getName()）
+     * @param callback  结果回调，null 表示家园不存在
+     */
+    public static void queryHomelandByWorldNameAsync(String worldName,
+                                                      Consumer<@Nullable HomelandInfo> callback) {
+        SimpleHomelandPlugin plugin = SimpleHomelandPlugin.getInstance();
+        if (plugin == null) {
+            callback.accept(null);
+            return;
+        }
+        plugin.getHomelandManager().queryHomelandByWorldNameAsync(worldName, callback);
     }
 
     /**

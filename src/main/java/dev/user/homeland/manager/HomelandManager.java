@@ -927,6 +927,60 @@ public class HomelandManager {
     }
 
     /**
+     * API 入口：按家园名称传送（家园名称全局唯一）。
+     * 若名称匹配到家园，走家园流程（权限检查、异步加载）。
+     * 若未匹配，回调 WORLD_NOT_FOUND。
+     */
+    public void teleportToHomelandByWorldNameAPI(Player player, String worldName,
+                                                  boolean bypassAccessCheck, Consumer<TeleportResult> callback) {
+        teleportToHomelandByWorldNameAPI(player, worldName, bypassAccessCheck, null, callback);
+    }
+
+    /**
+     * API 入口：按家园名称传送（家园名称全局唯一），可指定目标位置。
+     */
+    public void teleportToHomelandByWorldNameAPI(Player player, String worldName,
+                                                  boolean bypassAccessCheck, @org.jetbrains.annotations.Nullable Location location,
+                                                  Consumer<TeleportResult> callback) {
+        plugin.getLogger().info("[API] teleportByWorldName: player=" + player.getName()
+                + ", worldName=" + worldName + ", bypass=" + bypassAccessCheck
+                + ", loc=" + (location != null));
+
+        // 主服务器：查内存缓存
+        Homeland homeland = findHomelandByName(worldName);
+        if (homeland != null) {
+            plugin.getLogger().info("[API] teleportByWorldName: cache hit, owner=" + homeland.getOwnerUuid());
+            teleportToHomelandInternal(player, homeland, homeland.getWorldKey(), bypassAccessCheck, location, callback);
+            return;
+        }
+
+        // 分支模式：查数据库
+        if (branchMode) {
+            plugin.getLogger().info("[API] teleportByWorldName: branch mode, querying DB");
+            queryHomelandByWorldNameAsync(worldName, info -> {
+                if (info == null) {
+                    callback.accept(TeleportResult.WORLD_NOT_FOUND);
+                    return;
+                }
+                Homeland h = new Homeland(0, info.ownerUuid(), info.name(), info.worldKey(),
+                        info.borderRadius(), info.hasNether(), info.hasEnd(), info.isPublic(), null);
+                teleportToHomelandInternal(player, h, info.worldKey(), bypassAccessCheck, location, callback);
+            });
+            return;
+        }
+
+        plugin.getLogger().info("[API] teleportByWorldName: not found in cache, falling back to Bukkit.getWorld");
+        World bukkitWorld = Bukkit.getWorld(worldName);
+        if (bukkitWorld != null) {
+            plugin.getLogger().info("[API] teleportByWorldName: Bukkit found world=" + bukkitWorld.getName());
+            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+        } else {
+            plugin.getLogger().info("[API] teleportByWorldName: world not found anywhere");
+            callback.accept(TeleportResult.WORLD_NOT_FOUND);
+        }
+    }
+
+    /**
      * API 入口：按 worldKey 传送。
      * 若 worldKey 对应家园世界，走家园流程（权限检查、异步加载）；
      * 若不是家园世界但 Bukkit 中已注册，直接传送到该世界，回调 SUCCESS_OTHER_WORLD。
@@ -1119,6 +1173,45 @@ public class HomelandManager {
             return null;
         }, callback, error -> {
             plugin.getLogger().warning("查询家园(worldKey)失败: " + error.getMessage());
+            callback.accept(null);
+        });
+    }
+
+    /**
+     * 异步查询家园是否存在（通过家园名称，全局唯一）。
+     */
+    public void queryHomelandByWorldNameAsync(String worldName, java.util.function.Consumer<HomelandInfo> callback) {
+        Homeland cached = findHomelandByName(worldName);
+        if (cached != null) {
+            callback.accept(toHomelandInfo(cached));
+            return;
+        }
+        // 缓存未命中，查数据库
+        plugin.getDatabaseQueue().submit("query-homeland-name-" + worldName, conn -> {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public FROM homeland WHERE name = ?")) {
+                stmt.setString(1, worldName);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        String worldUuidStr = rs.getString("world_uuid");
+                        return new HomelandInfo(
+                                UUID.fromString(rs.getString("owner_uuid")),
+                                rs.getString("name"),
+                                rs.getString("world_key"),
+                                worldUuidStr != null ? UUID.fromString(worldUuidStr) : null,
+                                rs.getInt("border_radius"),
+                                rs.getBoolean("has_nether"),
+                                rs.getBoolean("has_end"),
+                                rs.getBoolean("is_public")
+                        );
+                    }
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("查询家园(name)失败: " + e.getMessage());
+            }
+            return null;
+        }, callback, error -> {
+            plugin.getLogger().warning("查询家园(name)失败: " + error.getMessage());
             callback.accept(null);
         });
     }
