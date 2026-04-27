@@ -899,7 +899,35 @@ public class HomelandManager {
             return;
         }
 
-        // 分支模式：查数据库查找家园
+        // 先尝试按 Bukkit UUID 查找（主模式和分支模式都先查本地）
+        plugin.getLogger().info("[API] teleportByWorldUUID: index miss, falling back to Bukkit.getWorld");
+        World bukkitWorld = Bukkit.getWorld(worldUUID);
+        if (bukkitWorld != null) {
+            plugin.getLogger().info("[API] teleportByWorldUUID: Bukkit found world=" + bukkitWorld.getName());
+            if (bypassAccessCheck) {
+                doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
+                return;
+            }
+            // 非 bypass：仍需查 DB 做权限检查，但使用本地世界直接传送
+            if (branchMode) {
+                queryHomelandByWorldUUIDAsync(worldUUID, info -> {
+                    if (info == null) {
+                        doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+                        return;
+                    }
+                    if (!canEnterWorld(player, info.worldKey())) {
+                        callback.accept(TeleportResult.ACCESS_DENIED);
+                        return;
+                    }
+                    doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
+                });
+                return;
+            }
+            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+            return;
+        }
+
+        // 分支模式：查数据库 + 跨服传送
         if (branchMode) {
             plugin.getLogger().info("[API] teleportByWorldUUID: branch mode, querying DB");
             queryHomelandByWorldUUIDAsync(worldUUID, info -> {
@@ -914,16 +942,8 @@ public class HomelandManager {
             return;
         }
 
-        // 非家园世界，尝试按 Bukkit UUID 查找
-        plugin.getLogger().info("[API] teleportByWorldUUID: index miss, falling back to Bukkit.getWorld");
-        World bukkitWorld = Bukkit.getWorld(worldUUID);
-        if (bukkitWorld != null) {
-            plugin.getLogger().info("[API] teleportByWorldUUID: Bukkit found world=" + bukkitWorld.getName());
-            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
-        } else {
-            plugin.getLogger().info("[API] teleportByWorldUUID: world not found anywhere");
-            callback.accept(TeleportResult.WORLD_NOT_FOUND);
-        }
+        plugin.getLogger().info("[API] teleportByWorldUUID: world not found anywhere");
+        callback.accept(TeleportResult.WORLD_NOT_FOUND);
     }
 
     /**
@@ -954,7 +974,35 @@ public class HomelandManager {
             return;
         }
 
-        // 分支模式：查数据库
+        // 先尝试按 Bukkit 名称查找（主模式和分支模式都先查本地）
+        plugin.getLogger().info("[API] teleportByWorldName: cache miss, falling back to Bukkit.getWorld");
+        World bukkitWorld = Bukkit.getWorld(worldName);
+        if (bukkitWorld != null) {
+            plugin.getLogger().info("[API] teleportByWorldName: Bukkit found world=" + bukkitWorld.getName());
+            if (bypassAccessCheck) {
+                doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
+                return;
+            }
+            // 非 bypass：仍需查 DB 做权限检查，但使用本地世界直接传送
+            if (branchMode) {
+                queryHomelandByWorldNameAsync(worldName, info -> {
+                    if (info == null) {
+                        doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+                        return;
+                    }
+                    if (!canEnterWorld(player, info.worldKey())) {
+                        callback.accept(TeleportResult.ACCESS_DENIED);
+                        return;
+                    }
+                    doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
+                });
+                return;
+            }
+            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+            return;
+        }
+
+        // 分支模式：查数据库 + 跨服传送
         if (branchMode) {
             plugin.getLogger().info("[API] teleportByWorldName: branch mode, querying DB");
             queryHomelandByWorldNameAsync(worldName, info -> {
@@ -969,15 +1017,8 @@ public class HomelandManager {
             return;
         }
 
-        plugin.getLogger().info("[API] teleportByWorldName: not found in cache, falling back to Bukkit.getWorld");
-        World bukkitWorld = Bukkit.getWorld(worldName);
-        if (bukkitWorld != null) {
-            plugin.getLogger().info("[API] teleportByWorldName: Bukkit found world=" + bukkitWorld.getName());
-            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
-        } else {
-            plugin.getLogger().info("[API] teleportByWorldName: world not found anywhere");
-            callback.accept(TeleportResult.WORLD_NOT_FOUND);
-        }
+        plugin.getLogger().info("[API] teleportByWorldName: world not found anywhere");
+        callback.accept(TeleportResult.WORLD_NOT_FOUND);
     }
 
     /**
@@ -1006,7 +1047,35 @@ public class HomelandManager {
             return;
         }
 
-        // 分支模式：查数据库查找家园
+        // 先尝试按 Bukkit key 查找（主模式和分支模式都先查本地）
+        plugin.getLogger().info("[API] teleportByWorldKey: index miss, falling back to Bukkit.getWorld");
+        World bukkitWorld = Bukkit.getWorld(worldKey);
+        if (bukkitWorld != null) {
+            plugin.getLogger().info("[API] teleportByWorldKey: Bukkit found world=" + bukkitWorld.getName());
+            if (bypassAccessCheck) {
+                doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
+                return;
+            }
+            // 非 bypass：仍需查 DB 做权限检查，但使用本地世界直接传送
+            if (branchMode) {
+                queryHomelandByWorldKeyAsync(worldKey, info -> {
+                    if (info == null) {
+                        doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+                        return;
+                    }
+                    if (!canEnterWorld(player, info.worldKey())) {
+                        callback.accept(TeleportResult.ACCESS_DENIED);
+                        return;
+                    }
+                    doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
+                });
+                return;
+            }
+            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
+            return;
+        }
+
+        // 分支模式：查数据库 + 跨服传送
         if (branchMode) {
             plugin.getLogger().info("[API] teleportByWorldKey: branch mode, querying DB");
             queryHomelandByWorldKeyAsync(worldKey, info -> {
@@ -1021,16 +1090,8 @@ public class HomelandManager {
             return;
         }
 
-        // 非家园世界，尝试按 Bukkit 名称查找
-        plugin.getLogger().info("[API] teleportByWorldKey: index miss, falling back to Bukkit.getWorld");
-        World bukkitWorld = Bukkit.getWorld(worldKey);
-        if (bukkitWorld != null) {
-            plugin.getLogger().info("[API] teleportByWorldKey: Bukkit found world=" + bukkitWorld.getName());
-            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
-        } else {
-            plugin.getLogger().info("[API] teleportByWorldKey: world not found anywhere");
-            callback.accept(TeleportResult.WORLD_NOT_FOUND);
-        }
+        plugin.getLogger().info("[API] teleportByWorldKey: world not found anywhere");
+        callback.accept(TeleportResult.WORLD_NOT_FOUND);
     }
 
     /**
