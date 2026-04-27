@@ -6,7 +6,6 @@ import dev.user.homeland.config.ServerMode;
 import dev.user.homeland.crossserver.CrossServerManager;
 import dev.user.homeland.database.DatabaseManager;
 import dev.user.homeland.database.DatabaseQueue;
-import dev.user.homeland.database.PlayerWarpDb;
 import dev.user.homeland.economy.EconomyManager;
 import dev.user.homeland.economy.PlayerPointsManager;
 import dev.user.homeland.gui.GUIManager;
@@ -16,7 +15,6 @@ import dev.user.homeland.listener.HomelandProtectionListener;
 import dev.user.homeland.listener.CommandBlockListener;
 import dev.user.homeland.listener.TeleportListener;
 import dev.user.homeland.listener.WorldLoadListener;
-import dev.user.homeland.listener.PlayerWarpListener;
 import dev.user.homeland.manager.HomelandManager;
 import dev.user.homeland.placeholder.HomelandExpansion;
 import net.thenextlvl.worlds.api.WorldsProvider;
@@ -36,7 +34,6 @@ public class SimpleHomelandPlugin extends JavaPlugin {
     private WorldsProvider worldsProvider;
     private HomelandExpansion homelandExpansion;
     private CrossServerManager crossServerManager;
-    private PlayerWarpDb playerWarpDb;
 
     @Override
     public void onEnable() {
@@ -110,21 +107,6 @@ public class SimpleHomelandPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new CommandBlockListener(this), this);
         }
 
-        // PlayerWarp 集成（软依赖）
-        if (getServer().getPluginManager().getPlugin("PlayerWarp") != null) {
-            if (configManager.isPlayerwarpDbEnabled()) {
-                this.playerWarpDb = new PlayerWarpDb(this);
-                if (playerWarpDb.init()) {
-                    getServer().getPluginManager().registerEvents(new PlayerWarpListener(this), this);
-                    getLogger().info("已集成 PlayerWarp");
-                } else {
-                    getLogger().warning("PlayerWarp 数据库初始化失败，PlayerWarp 集成已跳过");
-                }
-            } else {
-                getLogger().info("PlayerWarp 已安装但 playerwarp-database.enabled 未开启，集成已跳过");
-            }
-        }
-
         // 注册命令
         HomelandCommand cmdExecutor = new HomelandCommand(this);
         getCommand("homeland").setExecutor(cmdExecutor);
@@ -179,10 +161,6 @@ public class SimpleHomelandPlugin extends JavaPlugin {
             databaseManager.close();
         }
 
-        if (playerWarpDb != null) {
-            playerWarpDb.close();
-        }
-
         GUIManager.closeAll();
 
         getLogger().info("SimpleHomeland 插件已禁用！");
@@ -205,5 +183,4 @@ public class SimpleHomelandPlugin extends JavaPlugin {
     public HomelandManager getHomelandManager() { return homelandManager; }
     public WorldsProvider getWorldsProvider() { return worldsProvider; }
     public CrossServerManager getCrossServerManager() { return crossServerManager; }
-    public PlayerWarpDb getPlayerWarpDb() { return playerWarpDb; }
 }

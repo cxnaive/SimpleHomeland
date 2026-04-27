@@ -92,15 +92,6 @@ public class ConfigManager {
     private int heartbeatInterval;
     private int staleRequestSeconds;
 
-    // PlayerWarp 数据库配置
-    private boolean playerwarpDbEnabled;
-    private String playerwarpDbHost;
-    private int playerwarpDbPort;
-    private String playerwarpDbDatabase;
-    private String playerwarpDbUsername;
-    private String playerwarpDbPassword;
-    private int playerwarpDbPoolSize;
-
     // 消息渠道配置
     private String messageChannel;
     private String redisHost;
@@ -149,15 +140,6 @@ public class ConfigManager {
         this.mysqlUsername = config.getString("database.mysql.user", "root");
         this.mysqlPassword = config.getString("database.mysql.password", "");
         this.mysqlPoolSize = config.getInt("database.mysql.pool-size", 5);
-
-        // PlayerWarp 数据库配置
-        this.playerwarpDbEnabled = config.getBoolean("playerwarp-database.enabled", false);
-        this.playerwarpDbHost = config.getString("playerwarp-database.host", "localhost");
-        this.playerwarpDbPort = config.getInt("playerwarp-database.port", 3306);
-        this.playerwarpDbDatabase = config.getString("playerwarp-database.database", "playerwarp");
-        this.playerwarpDbUsername = config.getString("playerwarp-database.user", "root");
-        this.playerwarpDbPassword = config.getString("playerwarp-database.password", "");
-        this.playerwarpDbPoolSize = config.getInt("playerwarp-database.pool-size", 2);
 
         // 家园配置
         this.maxHomelands = config.getInt("homeland.max-homelands", 1);
@@ -323,14 +305,6 @@ public class ConfigManager {
     public String getMysqlUsername() { return mysqlUsername; }
     public String getMysqlPassword() { return mysqlPassword; }
     public int getMysqlPoolSize() { return mysqlPoolSize; }
-
-    public boolean isPlayerwarpDbEnabled() { return playerwarpDbEnabled; }
-    public String getPlayerwarpDbHost() { return playerwarpDbHost; }
-    public int getPlayerwarpDbPort() { return playerwarpDbPort; }
-    public String getPlayerwarpDbDatabase() { return playerwarpDbDatabase; }
-    public String getPlayerwarpDbUsername() { return playerwarpDbUsername; }
-    public String getPlayerwarpDbPassword() { return playerwarpDbPassword; }
-    public int getPlayerwarpDbPoolSize() { return playerwarpDbPoolSize; }
 
     public int getMaxHomelands() { return maxHomelands; }
     public int getDefaultBorderRadius() { return defaultBorderRadius; }

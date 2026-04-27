@@ -341,8 +341,3 @@ branch-mode-gui: "&c此操作仅限主服务器，请在主服务器上执行。
 branch-teleporting: "&a正在将你传送到主服务器..."
 branch-transfer-failed: "&c跨服传送失败，请稍后再试。"
 redis-connect-failed: "&cRedis 连接失败: {error}"
-
-# PlayerWarp 集成
-playerwarp-world-loading: "&a正在加载家园世界，请稍候..."
-playerwarp-world-load-failed: "&c家园世界加载失败，请联系管理员"
-playerwarp-branch-not-supported: "&c跨服模式下请先通过 &e/hl home &c进入家园世界"

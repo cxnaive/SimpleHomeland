@@ -36,18 +36,6 @@ database:
     password: ""
     pool-size: 5
 
-# PlayerWarp 数据库配置（仅 PlayerWarp 集成需要）
-# 用于查询 PlayerWarp 的地标数据（warp_player 表）
-# 如果与 SimpleHomeland 共用同一个 MySQL 数据库，保持相同配置即可
-playerwarp-database:
-  enabled: false
-  host: localhost
-  port: 3306
-  database: playerwarp
-  user: root
-  password: ""
-  pool-size: 2
-
 homeland:
   max-homelands: 1
   default-border-radius: 500
