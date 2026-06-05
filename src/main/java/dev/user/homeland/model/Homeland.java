@@ -17,16 +17,21 @@ public class Homeland {
     private final AtomicBoolean hasEnd;
     private final AtomicBoolean isPublic;
     private VisitorFlags visitorFlags;
+    private volatile CustomSettings customSettings;
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
-        this(id, ownerUuid, name, worldKey, null, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags);
+        this(id, ownerUuid, name, worldKey, null, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings());
     }
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
-        this(id, ownerUuid, name, worldKey, worldUuid, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags);
+        this(id, ownerUuid, name, worldKey, worldUuid, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings());
     }
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, String worldType, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
+        this(id, ownerUuid, name, worldKey, worldUuid, worldType, borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings());
+    }
+
+    public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, String worldType, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags, CustomSettings customSettings) {
         this.id = id;
         this.ownerUuid = ownerUuid;
         this.name = name;
@@ -38,6 +43,7 @@ public class Homeland {
         this.hasEnd = new AtomicBoolean(hasEnd);
         this.isPublic = new AtomicBoolean(isPublic);
         this.visitorFlags = visitorFlags != null ? visitorFlags : new VisitorFlags();
+        this.customSettings = customSettings != null ? customSettings : new CustomSettings();
     }
 
     public int getId() { return id; }
@@ -59,4 +65,6 @@ public class Homeland {
     public void setPublic(boolean isPublic) { this.isPublic.set(isPublic); }
     public VisitorFlags getVisitorFlags() { return visitorFlags; }
     public void setVisitorFlags(VisitorFlags visitorFlags) { this.visitorFlags = visitorFlags; }
+    public CustomSettings getCustomSettings() { return customSettings; }
+    public void setCustomSettings(CustomSettings customSettings) { this.customSettings = customSettings; }
 }

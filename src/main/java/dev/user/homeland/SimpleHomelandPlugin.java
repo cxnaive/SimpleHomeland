@@ -13,6 +13,7 @@ import dev.user.homeland.gui.GUIListener;
 import dev.user.homeland.listener.PlayerListener;
 import dev.user.homeland.listener.HomelandProtectionListener;
 import dev.user.homeland.listener.CommandBlockListener;
+import dev.user.homeland.listener.CustomSettingListener;
 import dev.user.homeland.listener.TeleportListener;
 import dev.user.homeland.listener.WorldLoadListener;
 import dev.user.homeland.manager.HomelandManager;
@@ -105,6 +106,7 @@ public class SimpleHomelandPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new WorldLoadListener(this), this);
             getServer().getPluginManager().registerEvents(new HomelandProtectionListener(this), this);
             getServer().getPluginManager().registerEvents(new CommandBlockListener(this), this);
+            getServer().getPluginManager().registerEvents(new CustomSettingListener(this), this);
         }
 
         // 注册命令

@@ -8,6 +8,7 @@ import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.ConfigManager.GameRuleConfig;
 import dev.user.homeland.config.PriceTier;
 import dev.user.homeland.model.Homeland;
+import dev.user.homeland.model.CustomSettings;
 import dev.user.homeland.model.VisitorFlag;
 import dev.user.homeland.model.VisitorFlags;
 import dev.user.homeland.util.MessageUtil;
@@ -96,7 +97,7 @@ public class HomelandManager {
         plugin.getDatabaseQueue().submit("load-homelands-" + playerUuid, conn -> {
             List<Homeland> homelands = new ArrayList<>();
             try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT id, owner_uuid, name, world_key, border_radius, has_nether, has_end, is_public, visitor_flags, COALESCE(world_type, 'default') as world_type FROM homeland WHERE owner_uuid = ?")) {
+                    "SELECT id, owner_uuid, name, world_key, border_radius, has_nether, has_end, is_public, visitor_flags, COALESCE(world_type, 'default') as world_type, COALESCE(custom_settings, '{}') as custom_settings FROM homeland WHERE owner_uuid = ?")) {
                 stmt.setString(1, playerUuid.toString());
                 try (ResultSet rs = stmt.executeQuery()) {
                     while (rs.next()) {
@@ -111,7 +112,8 @@ public class HomelandManager {
                                 rs.getBoolean("has_nether"),
                                 rs.getBoolean("has_end"),
                                 rs.getBoolean("is_public"),
-                                VisitorFlags.fromJson(rs.getString("visitor_flags"))
+                                VisitorFlags.fromJson(rs.getString("visitor_flags")),
+                                CustomSettings.fromJson(rs.getString("custom_settings"))
                         ));
                     }
                 }
@@ -173,7 +175,7 @@ public class HomelandManager {
         plugin.getDatabaseQueue().submit("load-homelands-async-" + playerUuid, conn -> {
             List<Homeland> homelands = new ArrayList<>();
             try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT id, owner_uuid, name, world_key, border_radius, has_nether, has_end, is_public, visitor_flags, COALESCE(world_type, 'default') as world_type FROM homeland WHERE owner_uuid = ?")) {
+                    "SELECT id, owner_uuid, name, world_key, border_radius, has_nether, has_end, is_public, visitor_flags, COALESCE(world_type, 'default') as world_type, COALESCE(custom_settings, '{}') as custom_settings FROM homeland WHERE owner_uuid = ?")) {
                 stmt.setString(1, playerUuid.toString());
                 try (ResultSet rs = stmt.executeQuery()) {
                     while (rs.next()) {
@@ -188,7 +190,8 @@ public class HomelandManager {
                                 rs.getBoolean("has_nether"),
                                 rs.getBoolean("has_end"),
                                 rs.getBoolean("is_public"),
-                                VisitorFlags.fromJson(rs.getString("visitor_flags"))
+                                VisitorFlags.fromJson(rs.getString("visitor_flags")),
+                                CustomSettings.fromJson(rs.getString("custom_settings"))
                         ));
                     }
                 }
@@ -429,7 +432,7 @@ public class HomelandManager {
                                 java.util.UUID worldUuid = overworld.getUID();
                                 plugin.getDatabaseQueue().submit("create-homeland", conn -> {
                                     try (PreparedStatement stmt = conn.prepareStatement(
-                                            "INSERT INTO homeland (owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, world_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                            "INSERT INTO homeland (owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, world_type, custom_settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                             PreparedStatement.RETURN_GENERATED_KEYS)) {
                                         stmt.setString(1, ownerUuid.toString());
                                         stmt.setString(2, name);
@@ -441,12 +444,13 @@ public class HomelandManager {
                                         stmt.setBoolean(8, false);
                                         stmt.setString(9, new VisitorFlags().toJson());
                                         stmt.setString(10, worldTypeKey);
+                                        stmt.setString(11, new CustomSettings().toJson());
                                         stmt.executeUpdate();
 
                                         try (ResultSet rs = stmt.getGeneratedKeys()) {
                                             if (rs.next()) {
                                                 int id = rs.getInt(1);
-                                                Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, worldUuid, worldTypeKey, borderRadius, false, false, false, new VisitorFlags());
+                                                Homeland homeland = new Homeland(id, ownerUuid, name, worldKey, worldUuid, worldTypeKey, borderRadius, false, false, false, new VisitorFlags(), new CustomSettings());
                                                 homelandCache.computeIfAbsent(ownerUuid, k -> new CopyOnWriteArrayList<>()).add(homeland);
                                                 indexHomeland(homeland);
                                             }
@@ -2667,7 +2671,7 @@ public class HomelandManager {
         plugin.getDatabaseQueue().submit("load-world-key-index", conn -> {
             java.util.Map<String, Homeland> index = new java.util.HashMap<>();
             try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT id, owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, COALESCE(world_type, 'default') as world_type FROM homeland");
+                    "SELECT id, owner_uuid, name, world_key, world_uuid, border_radius, has_nether, has_end, is_public, visitor_flags, COALESCE(world_type, 'default') as world_type, COALESCE(custom_settings, '{}') as custom_settings FROM homeland");
                  ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
                     String worldUuidStr = rs.getString("world_uuid");
@@ -2683,7 +2687,8 @@ public class HomelandManager {
                             rs.getBoolean("has_nether"),
                             rs.getBoolean("has_end"),
                             rs.getBoolean("is_public"),
-                            VisitorFlags.fromJson(rs.getString("visitor_flags"))
+                            VisitorFlags.fromJson(rs.getString("visitor_flags")),
+                            CustomSettings.fromJson(rs.getString("custom_settings"))
                     );
                     index.put(h.getWorldKey(), h);
                     if (h.hasNether()) index.put(h.getWorldKey() + "_nether", h);
@@ -3212,6 +3217,49 @@ public class HomelandManager {
             plugin.getLogger().warning("更新访客权限失败: " + error.getMessage());
             homeland.getVisitorFlags().set(flag, !value);
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("visitor-flag-update-failed"));
+            onFailure.run();
+        });
+    }
+
+    /**
+     * 更新自定义设置
+     */
+    public void updateCustomSetting(Player owner, String homelandName, String key, boolean value,
+                                    Runnable onSuccess, Runnable onFailure) {
+        updateCustomSettingInternal(owner, owner.getUniqueId(), homelandName, key, value, onSuccess, onFailure);
+    }
+
+    public void updateCustomSettingAdmin(CommandSender sender, UUID ownerUuid, String homelandName,
+                                         String key, boolean value, Runnable onSuccess, Runnable onFailure) {
+        updateCustomSettingInternal(sender, ownerUuid, homelandName, key, value, onSuccess, onFailure);
+    }
+
+    private void updateCustomSettingInternal(CommandSender messageTarget, UUID ownerUuid, String homelandName,
+                                             String key, boolean value, Runnable onSuccess, Runnable onFailure) {
+        Optional<Homeland> optHomeland = getHomeland(ownerUuid, homelandName);
+        if (optHomeland.isEmpty()) {
+            MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
+            onFailure.run();
+            return;
+        }
+
+        Homeland homeland = optHomeland.get();
+        homeland.getCustomSettings().set(key, value);
+        String json = homeland.getCustomSettings().toJson();
+
+        plugin.getDatabaseQueue().submit("update-custom-setting-" + homeland.getId(), conn -> {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "UPDATE homeland SET custom_settings = ? WHERE id = ?")) {
+                stmt.setString(1, json);
+                stmt.setInt(2, homeland.getId());
+                stmt.executeUpdate();
+            }
+            return null;
+        }, result -> {
+            onSuccess.run();
+        }, error -> {
+            plugin.getLogger().warning("更新自定义设置失败: " + error.getMessage());
+            homeland.getCustomSettings().set(key, !value);
             onFailure.run();
         });
     }

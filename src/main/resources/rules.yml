@@ -306,3 +306,13 @@ gamerules:
     lore:
       - "&7获得进度时是否全服播报"
     default-value: true
+
+  # ---- 自定义规则（无原生 GameRule，通过事件监听器实现） ----
+  PREVENT_ICE_SNOW_MELTING:
+    enabled: true
+    material: PACKED_ICE
+    name: "&6防止冰雪融化"
+    lore:
+      - "&7防止冰块和雪层自然融化"
+    default-value: false
+    custom: true

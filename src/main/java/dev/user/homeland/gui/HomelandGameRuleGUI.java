@@ -88,7 +88,7 @@ public class HomelandGameRuleGUI extends AbstractGUI {
 
         List<GameRuleConfig> gamerules = config.getEnabledGameruleConfigs();
 
-        if (overworld == null || gamerules.isEmpty()) {
+        if ((overworld == null && gamerules.stream().noneMatch(GameRuleConfig::isCustom)) || gamerules.isEmpty()) {
             setItem(cfg.getEmptySlot(), createEmptyItem(gamerules.isEmpty()), null);
         } else {
             int[] pageSlots = cfg.getPageSlots();
@@ -98,7 +98,10 @@ public class HomelandGameRuleGUI extends AbstractGUI {
                 if (idx >= gamerules.size()) break;
 
                 GameRuleConfig grc = gamerules.get(idx);
-                String currentValue = getGameruleValue(overworld, grc);
+                // 原生规则需要世界已加载才能读取值
+                if (!grc.isCustom() && overworld == null) continue;
+
+                String currentValue = getGameruleValue(overworld, grc, homeland);
                 setItem(pageSlots[i], createGameruleItem(grc, currentValue), (p, e) -> {
                     handleClick(grc, currentValue, p, e);
                 });
@@ -152,14 +155,23 @@ public class HomelandGameRuleGUI extends AbstractGUI {
             }
         }
 
+        Runnable onSuccess = () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L);
+        Runnable onFailure = () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L);
+
+        if (grc.isCustom()) {
+            boolean val = Boolean.parseBoolean(newValue);
+            if (isAdmin) {
+                plugin.getHomelandManager().updateCustomSettingAdmin(p, ownerUuid, homelandName, grc.getKey(), val, onSuccess, onFailure);
+            } else {
+                plugin.getHomelandManager().updateCustomSetting(p, homelandName, grc.getKey(), val, onSuccess, onFailure);
+            }
+            return;
+        }
+
         if (isAdmin) {
-            plugin.getHomelandManager().setGameruleAdmin(p, ownerUuid, homelandName, grc, newValue,
-                    () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
-                    () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
+            plugin.getHomelandManager().setGameruleAdmin(p, ownerUuid, homelandName, grc, newValue, onSuccess, onFailure);
         } else {
-            plugin.getHomelandManager().setGamerule(p, homelandName, grc, newValue,
-                    () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L),
-                    () -> p.getScheduler().execute(plugin, () -> refresh(), () -> {}, 0L));
+            plugin.getHomelandManager().setGamerule(p, homelandName, grc, newValue, onSuccess, onFailure);
         }
     }
 
@@ -254,7 +266,11 @@ public class HomelandGameRuleGUI extends AbstractGUI {
     }
 
     @SuppressWarnings("unchecked")
-    private String getGameruleValue(World world, GameRuleConfig grc) {
+    private String getGameruleValue(World world, GameRuleConfig grc, Homeland homeland) {
+        if (grc.isCustom()) {
+            return String.valueOf(homeland.getCustomSettings()
+                    .get(grc.getKey(), Boolean.parseBoolean(grc.getDefaultValue())));
+        }
         if (grc.isBooleanType()) {
             return String.valueOf(world.getGameRuleValue((GameRule<Boolean>) grc.getGameRule()));
         } else {

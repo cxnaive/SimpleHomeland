@@ -206,6 +206,13 @@ public class DatabaseManager {
                 // 列已存在，忽略
             }
 
+            // 兼容旧库：添加 custom_settings 列
+            try {
+                stmt.execute("ALTER TABLE homeland ADD COLUMN custom_settings TEXT");
+            } catch (SQLException ignored) {
+                // 列已存在，忽略
+            }
+
             // 跨服消息表（仅 MySQL）
             if (isMySQL) {
                 String messageTable = "CREATE TABLE IF NOT EXISTS homeland_messages (" +

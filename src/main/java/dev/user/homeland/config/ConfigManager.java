@@ -534,6 +534,7 @@ public class ConfigManager {
         private final String defaultValue;
         private final GameRule<?> gameRule;
         private final boolean isBooleanType;
+        private final boolean custom;
 
         public GameRuleConfig(String key, ConfigurationSection sec) {
             this.key = key;
@@ -541,11 +542,18 @@ public class ConfigManager {
             this.name = sec.getString("name", key);
             this.lore = sec.getStringList("lore");
             this.defaultValue = sec.getString("default-value", "false");
-            this.gameRule = GAME_RULE_MAP.get(key);
-            if (this.gameRule == null) {
-                throw new IllegalArgumentException("未知的 GameRule: " + key);
+            this.custom = sec.getBoolean("custom", false);
+
+            if (this.custom) {
+                this.gameRule = null;
+                this.isBooleanType = true;
+            } else {
+                this.gameRule = GAME_RULE_MAP.get(key);
+                if (this.gameRule == null) {
+                    throw new IllegalArgumentException("未知的 GameRule: " + key);
+                }
+                this.isBooleanType = this.gameRule.getType() == Boolean.class;
             }
-            this.isBooleanType = this.gameRule.getType() == Boolean.class;
         }
 
         public String getKey() { return key; }
@@ -555,6 +563,7 @@ public class ConfigManager {
         public String getDefaultValue() { return defaultValue; }
         public GameRule<?> getGameRule() { return gameRule; }
         public boolean isBooleanType() { return isBooleanType; }
+        public boolean isCustom() { return custom; }
     }
 
     // ==================== BiomeEntry 内部类 ====================
