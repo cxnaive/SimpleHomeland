@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "dev.user"
-version = "1.7.5"
+version = "1.7.6"
 
 repositories {
     mavenCentral()
