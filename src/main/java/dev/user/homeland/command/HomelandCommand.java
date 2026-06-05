@@ -51,14 +51,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     }
 
     private List<String> getOnlinePlayerNames() {
-        if (plugin.getConfigManager().isBranchMode()) {
-            return new ArrayList<>(plugin.getCrossServerManager().getCachedOnlinePlayers().values());
-        }
-        List<String> names = new ArrayList<>();
-        for (Player p : plugin.getServer().getOnlinePlayers()) {
-            names.add(p.getName());
-        }
-        return names;
+        return new ArrayList<>(plugin.getCrossServerManager().getAllOnlinePlayers().values());
     }
 
     private boolean isBranchMode() {

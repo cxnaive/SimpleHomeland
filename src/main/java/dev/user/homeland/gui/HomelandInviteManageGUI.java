@@ -154,14 +154,7 @@ public class HomelandInviteManageGUI extends AbstractGUI {
     // ==================== 在线玩家模式 ====================
 
     private Map<UUID, String> getOnlinePlayerMap() {
-        if (plugin.getConfigManager().isBranchMode()) {
-            return plugin.getCrossServerManager().getCachedOnlinePlayers();
-        }
-        Map<UUID, String> map = new java.util.LinkedHashMap<>();
-        for (Player p : plugin.getServer().getOnlinePlayers()) {
-            map.put(p.getUniqueId(), p.getName());
-        }
-        return map;
+        return plugin.getCrossServerManager().getAllOnlinePlayers();
     }
 
     private int countAvailableOnlinePlayers(Homeland homeland) {

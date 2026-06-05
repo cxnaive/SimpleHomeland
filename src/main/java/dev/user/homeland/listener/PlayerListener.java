@@ -177,25 +177,22 @@ public class PlayerListener implements Listener {
         String homelandName = (String) state[0];
         boolean isUninvite = (Boolean) state[1];
 
-        // 查找目标玩家
+        // 查找目标玩家：优先本地实时，再从全服缓存查找
         UUID targetUuid = null;
         String targetName = null;
 
-        if (plugin.getConfigManager().isBranchMode()) {
-            // 分支模式：从缓存的在线玩家中查找
-            var cached = plugin.getCrossServerManager().getCachedOnlinePlayers();
-            for (var entry : cached.entrySet()) {
+        Player localTarget = plugin.getServer().getPlayer(input);
+        if (localTarget != null) {
+            targetUuid = localTarget.getUniqueId();
+            targetName = localTarget.getName();
+        } else {
+            // 从跨服缓存中查找
+            for (var entry : plugin.getCrossServerManager().getAllOnlinePlayers().entrySet()) {
                 if (entry.getValue().equalsIgnoreCase(input)) {
                     targetUuid = entry.getKey();
                     targetName = entry.getValue();
                     break;
                 }
-            }
-        } else {
-            Player target = plugin.getServer().getPlayer(input);
-            if (target != null) {
-                targetUuid = target.getUniqueId();
-                targetName = target.getName();
             }
         }
 

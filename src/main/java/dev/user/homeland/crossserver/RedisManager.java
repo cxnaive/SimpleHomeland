@@ -170,6 +170,46 @@ public class RedisManager {
     // ==================== Branch Mode ====================
 
     public void startOnlineSync() {
+        // 分支心跳：写入自己的在线玩家
+        ConfigManager config = plugin.getConfigManager();
+        long heartbeatTicks = config.getHeartbeatInterval() * 20L;
+        heartbeatTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> writeBranchHeartbeat(),
+                heartbeatTicks, heartbeatTicks);
+        writeBranchHeartbeat();
+
+        // 聚合所有服务器的在线玩家
+        long syncTicks = 200L;
+        onlineSyncTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> refreshOnlinePlayers(),
+                syncTicks, syncTicks);
+        refreshOnlinePlayers();
+    }
+
+    /**
+     * 分支服务器写入自己的在线玩家心跳到 Redis。
+     */
+    private void writeBranchHeartbeat() {
+        JsonArray playersArray = new JsonArray();
+        for (var p : Bukkit.getOnlinePlayers()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("uuid", p.getUniqueId().toString());
+            obj.addProperty("name", p.getName());
+            playersArray.add(obj);
+        }
+        String onlineJson = playersArray.toString();
+        ConfigManager config = plugin.getConfigManager();
+        String playersKey = PLAYERS_PREFIX + config.getServerId();
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.setex(playersKey, config.getStaleRequestSeconds(), onlineJson);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Redis 写入分支心跳失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 主服务器调用：启动聚合其他服务器在线玩家的定时任务。
+     */
+    public void startMainOnlineSync() {
         long syncTicks = 200L;
         onlineSyncTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> refreshOnlinePlayers(),
                 syncTicks, syncTicks);
@@ -178,22 +218,37 @@ public class RedisManager {
 
     private void refreshOnlinePlayers() {
         ConfigManager config = plugin.getConfigManager();
-        String playersKey = PLAYERS_PREFIX + config.getMainServer();
+        String selfServerId = config.getServerId();
 
         try (Jedis jedis = jedisPool.getResource()) {
-            String json = jedis.get(playersKey);
-            if (json != null && !json.isEmpty()) {
-                Map<UUID, String> newMap = new LinkedHashMap<>();
-                JsonArray arr = JsonParser.parseString(json).getAsJsonArray();
-                for (int i = 0; i < arr.size(); i++) {
-                    JsonObject obj = arr.get(i).getAsJsonObject();
-                    UUID uuid = UUID.fromString(obj.get("uuid").getAsString());
-                    String name = obj.get("name").getAsString();
-                    newMap.put(uuid, name);
+            Map<UUID, String> newMap = new LinkedHashMap<>();
+            var cursor = "0";
+            do {
+                var scanResult = jedis.scan(cursor,
+                        new redis.clients.jedis.params.ScanParams().match(PLAYERS_PREFIX + "*").count(100));
+                for (String key : scanResult.getResult()) {
+                    // 从 key 中提取 server_id: "shl:players:<serverId>"
+                    String serverId = key.substring(PLAYERS_PREFIX.length());
+                    if (serverId.equals(selfServerId)) continue; // 跳过自己
+                    String json = jedis.get(key);
+                    if (json == null || json.isEmpty()) continue;
+                    try {
+                        JsonArray arr = JsonParser.parseString(json).getAsJsonArray();
+                        for (int i = 0; i < arr.size(); i++) {
+                            JsonObject obj = arr.get(i).getAsJsonObject();
+                            UUID uuid = UUID.fromString(obj.get("uuid").getAsString());
+                            String name = obj.get("name").getAsString();
+                            newMap.put(uuid, name);
+                        }
+                    } catch (Exception e) {
+                        plugin.getLogger().fine("Redis 解析玩家数据失败: " + key + " - " + e.getMessage());
+                    }
                 }
-                cachedOnlinePlayers.clear();
-                cachedOnlinePlayers.putAll(newMap);
-            }
+                cursor = scanResult.getCursor();
+            } while (!cursor.equals("0"));
+
+            cachedOnlinePlayers.clear();
+            cachedOnlinePlayers.putAll(newMap);
         } catch (Exception e) {
             plugin.getLogger().fine("Redis 同步在线玩家失败: " + e.getMessage());
         }

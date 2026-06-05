@@ -51,15 +51,7 @@ public class HomelandAdminGUI extends AbstractGUI {
         setItem(cfg.getInfoSlot(), createInfoItem());
 
         // 显示在线玩家
-        Map<UUID, String> playerNames;
-        if (plugin.getConfigManager().isBranchMode()) {
-            playerNames = plugin.getCrossServerManager().getCachedOnlinePlayers();
-        } else {
-            playerNames = new java.util.LinkedHashMap<>();
-            for (Player p : plugin.getServer().getOnlinePlayers()) {
-                playerNames.put(p.getUniqueId(), p.getName());
-            }
-        }
+        Map<UUID, String> playerNames = plugin.getCrossServerManager().getAllOnlinePlayers();
         List<UUID> onlineUuids = new ArrayList<>(playerNames.keySet());
 
         if (onlineUuids.isEmpty()) {

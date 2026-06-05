@@ -48,16 +48,7 @@ public class HomelandVisitorGUI extends AbstractGUI {
 
         // 在线玩家列表（排除自己）
         List<UUID> playerUuids = new ArrayList<>();
-        Map<UUID, String> playerNames;
-
-        if (plugin.getConfigManager().isBranchMode()) {
-            playerNames = plugin.getCrossServerManager().getCachedOnlinePlayers();
-        } else {
-            playerNames = new java.util.LinkedHashMap<>();
-            for (Player p : plugin.getServer().getOnlinePlayers()) {
-                playerNames.put(p.getUniqueId(), p.getName());
-            }
-        }
+        Map<UUID, String> playerNames = plugin.getCrossServerManager().getAllOnlinePlayers();
         playerNames.forEach((uuid, name) -> {
             if (!uuid.equals(player.getUniqueId())) {
                 playerUuids.add(uuid);

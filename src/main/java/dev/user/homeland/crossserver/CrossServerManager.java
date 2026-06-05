@@ -75,17 +75,24 @@ public class CrossServerManager {
 
         if (redisManager != null) {
             redisManager.startHeartbeat();
+            redisManager.startMainOnlineSync();
             redisManager.startMessageListener(this::handleMessage);
             plugin.getLogger().info("跨服: 主服务器模式已启动 (Redis, 心跳=" + config.getHeartbeatInterval() + "s)");
         } else {
             long heartbeatTicks = config.getHeartbeatInterval() * 20L;
             long pollTicks = config.getPollInterval() * 20L;
+            long syncTicks = 200L;
 
             heartbeatTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> writeHeartbeat(),
                     heartbeatTicks, heartbeatTicks);
 
             messagePollTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> pollMessages(),
                     pollTicks, pollTicks);
+
+            // 聚合其他服务器的在线玩家
+            onlineSyncTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> refreshOnlinePlayers(),
+                    syncTicks, syncTicks);
+            refreshOnlinePlayers();
 
             plugin.getLogger().info("跨服: 主服务器模式已启动 (MySQL, 心跳=" + config.getHeartbeatInterval()
                     + "s, 轮询=" + config.getPollInterval() + "s)");
@@ -128,6 +135,36 @@ public class CrossServerManager {
                 ps.executeUpdate();
             } catch (Exception e) {
                 plugin.getLogger().warning("写入心跳失败: " + e.getMessage());
+            }
+            return null;
+        });
+    }
+
+    /**
+     * 分支服务器写入自己的在线玩家心跳。
+     */
+    private void writeBranchHeartbeat() {
+        JsonArray playersArray = new JsonArray();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("uuid", p.getUniqueId().toString());
+            obj.addProperty("name", p.getName());
+            playersArray.add(obj);
+        }
+        String onlineJson = playersArray.toString();
+        ConfigManager config = plugin.getConfigManager();
+
+        plugin.getDatabaseQueue().submit("branch-heartbeat", conn -> {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO homeland_server_status (server_id, server_mode, online_players, updated_at) " +
+                            "VALUES (?, 'branch', ?, CURRENT_TIMESTAMP) " +
+                            "ON DUPLICATE KEY UPDATE server_mode='branch', online_players=?, updated_at=CURRENT_TIMESTAMP")) {
+                ps.setString(1, config.getServerId());
+                ps.setString(2, onlineJson);
+                ps.setString(3, onlineJson);
+                ps.executeUpdate();
+            } catch (Exception e) {
+                plugin.getLogger().warning("写入分支心跳失败: " + e.getMessage());
             }
             return null;
         });
@@ -294,7 +331,16 @@ public class CrossServerManager {
         if (redisManager != null) {
             redisManager.startOnlineSync();
         } else {
+            ConfigManager config = plugin.getConfigManager();
+            long heartbeatTicks = config.getHeartbeatInterval() * 20L;
             long syncTicks = 200L;
+
+            // 分支心跳：写入自己的在线玩家
+            heartbeatTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> writeBranchHeartbeat(),
+                    heartbeatTicks, heartbeatTicks);
+            writeBranchHeartbeat();
+
+            // 聚合所有服务器的在线玩家
             onlineSyncTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> refreshOnlinePlayers(),
                     syncTicks, syncTicks);
             refreshOnlinePlayers();
@@ -398,15 +444,29 @@ public class CrossServerManager {
 
     private void refreshOnlinePlayers() {
         ConfigManager config = plugin.getConfigManager();
+        String selfServerId = config.getServerId();
+        long staleMs = config.getStaleRequestSeconds() * 1000L;
+
         plugin.getDatabaseQueue().submit("sync-online", conn -> {
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "SELECT online_players, loaded_worlds FROM homeland_server_status WHERE server_id = ?")) {
-                ps.setString(1, config.getMainServer());
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    String json = rs.getString("online_players");
-                    if (json != null && !json.isEmpty()) {
-                        Map<UUID, String> newMap = new LinkedHashMap<>();
+            try {
+                // 清理过期的服务器行（2 倍过期时间，防止无限积累）
+                try (PreparedStatement cleanup = conn.prepareStatement(
+                        "DELETE FROM homeland_server_status WHERE updated_at < ?")) {
+                    cleanup.setTimestamp(1, new Timestamp(System.currentTimeMillis() - (staleMs * 2)));
+                    cleanup.executeUpdate();
+                } catch (Exception ignored) {}
+
+                // 读取所有活跃服务器的在线玩家（跳过自己）
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "SELECT server_id, online_players FROM homeland_server_status WHERE updated_at > ?")) {
+                    ps.setTimestamp(1, new Timestamp(System.currentTimeMillis() - staleMs));
+                    ResultSet rs = ps.executeQuery();
+                    Map<UUID, String> newMap = new LinkedHashMap<>();
+                    while (rs.next()) {
+                        String serverId = rs.getString("server_id");
+                        if (serverId.equals(selfServerId)) continue;
+                        String json = rs.getString("online_players");
+                        if (json == null || json.isEmpty()) continue;
                         JsonArray arr = JsonParser.parseString(json).getAsJsonArray();
                         for (int i = 0; i < arr.size(); i++) {
                             JsonObject obj = arr.get(i).getAsJsonObject();
@@ -414,9 +474,9 @@ public class CrossServerManager {
                             String name = obj.get("name").getAsString();
                             newMap.put(uuid, name);
                         }
-                        cachedOnlinePlayers.clear();
-                        cachedOnlinePlayers.putAll(newMap);
                     }
+                    cachedOnlinePlayers.clear();
+                    cachedOnlinePlayers.putAll(newMap);
                 }
             } catch (Exception e) {
                 plugin.getLogger().fine("同步在线玩家失败: " + e.getMessage());
@@ -430,6 +490,25 @@ public class CrossServerManager {
             return redisManager.getCachedOnlinePlayers();
         }
         return Collections.unmodifiableMap(cachedOnlinePlayers);
+    }
+
+    /**
+     * 获取所有在线玩家（本地实时 + 远程缓存）。
+     * 远程缓存优先放入，本地玩家覆盖（本地实时数据权威）。
+     */
+    public Map<UUID, String> getAllOnlinePlayers() {
+        Map<UUID, String> result = new LinkedHashMap<>();
+        // 远程玩家（缓存，略有延迟）
+        if (redisManager != null) {
+            result.putAll(redisManager.getCachedOnlinePlayers());
+        } else {
+            result.putAll(cachedOnlinePlayers);
+        }
+        // 本地玩家覆盖（实时，权威）
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            result.put(p.getUniqueId(), p.getName());
+        }
+        return result;
     }
 
     public boolean isWorldLoadedOnMain(String worldKey) {
@@ -505,7 +584,8 @@ public class CrossServerManager {
         pendingTeleports.clear();
         cachedOnlinePlayers.clear();
 
-        if (redisManager == null && !plugin.getConfigManager().isBranchMode()) {
+        // 清理自己的服务器行（主服务器和分支服务器都清理）
+        if (redisManager == null) {
             plugin.getDatabaseQueue().submit("cleanup-heartbeat", conn -> {
                 try (PreparedStatement ps = conn.prepareStatement(
                         "DELETE FROM homeland_server_status WHERE server_id = ?")) {
