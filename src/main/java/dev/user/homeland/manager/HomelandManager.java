@@ -485,6 +485,12 @@ public class HomelandManager {
                                 });
                             } catch (Exception e) {
                                 plugin.getLogger().severe("创建家园后续处理失败: " + e.getMessage());
+                                // 尝试清理已创建的世界（避免遗留孤儿世界）
+                                try {
+                                    plugin.getWorldsProvider().levelView().deleteAsync(overworld, true);
+                                } catch (Exception ex) {
+                                    plugin.getLogger().warning("清理失败的世界失败: " + ex.getMessage());
+                                }
                                 refundEconomy(messageTarget instanceof Player p ? p : null, moneyCost, pointsCost);
                                 sendAsyncMessage(messageTarget, config.getMessage("create-failed"));
                                 lockedOnFailure.run();
@@ -2882,6 +2888,7 @@ public class HomelandManager {
     @SuppressWarnings("deprecation")
     public void applyDefaultGamerules(World world) {
         for (GameRuleConfig grc : plugin.getConfigManager().getAllGameruleConfigs()) {
+            if (grc.isCustom()) continue; // 自定义规则存储在 Homeland 模型，不应用到 World
             applyGamerule(world, grc, grc.getDefaultValue());
         }
     }
@@ -2900,6 +2907,7 @@ public class HomelandManager {
     @SuppressWarnings("unchecked")
     public void copyGamerules(World source, World target) {
         for (GameRuleConfig grc : plugin.getConfigManager().getAllGameruleConfigs()) {
+            if (grc.isCustom()) continue; // 自定义规则存储在 Homeland 模型，无需跨世界复制
             String value = getGameruleValue(source, grc);
             applyGamerule(target, grc, value);
         }
