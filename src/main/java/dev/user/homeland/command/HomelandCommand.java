@@ -14,8 +14,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class HomelandCommand implements CommandExecutor, TabCompleter {
 
@@ -37,6 +39,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     private static final List<String> VALID_WORLD_TYPES = List.of("default", "void", "flat");
 
     private final SimpleHomelandPlugin plugin;
+
+    // 孤儿世界清理的待删除列表（per-sender：玩家用 UUID，控制台用 CONSOLE）
+    private final Map<String, List<dev.user.homeland.manager.HomelandManager.OrphanWorld>> pendingCleanups = new ConcurrentHashMap<>();
 
     public HomelandCommand(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
@@ -465,6 +470,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
             case "border" -> handleAdminBorder(sender, args);
             case "unlock" -> handleAdminUnlock(sender, args);
             case "lock" -> handleAdminLock(sender, args);
+            case "cleanup" -> handleAdminCleanup(sender, args);
             default -> {
                 sendAdminUsage(sender);
                 yield true;
@@ -695,6 +701,53 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    // ==================== 孤儿世界清理 ====================
+
+    private boolean handleAdminCleanup(CommandSender sender, String[] args) {
+        if (!requireMainMode(sender)) return true;
+
+        // /homeland admin cleanup confirm — 执行删除
+        if (args.length >= 3 && args[2].equalsIgnoreCase("confirm")) {
+            String senderKey = sender instanceof Player p ? p.getUniqueId().toString() : "CONSOLE";
+            List<dev.user.homeland.manager.HomelandManager.OrphanWorld> pending = pendingCleanups.get(senderKey);
+            if (pending == null || pending.isEmpty()) {
+                sendMessage(sender, plugin.getConfigManager().getMessage("cleanup-no-pending"));
+                return true;
+            }
+            int count = pending.size();
+            sendMessage(sender, plugin.getConfigManager().getMessage("cleanup-deleting", "count", String.valueOf(count)));
+            final List<dev.user.homeland.manager.HomelandManager.OrphanWorld> toDelete = new ArrayList<>(pending);
+            pendingCleanups.remove(senderKey);
+            plugin.getHomelandManager().deleteOrphanWorlds(toDelete, (success, fail) -> {
+                sendMessage(sender, plugin.getConfigManager().getMessage("cleanup-result",
+                        "success", String.valueOf(success),
+                        "failed", String.valueOf(fail)));
+            });
+            return true;
+        }
+
+        // /homeland admin cleanup — 扫描并列出
+        Bukkit.getAsyncScheduler().runNow(plugin, task -> {
+            List<dev.user.homeland.manager.HomelandManager.OrphanWorld> orphans = plugin.getHomelandManager().scanOrphanWorlds();
+            if (orphans.isEmpty()) {
+                sendMessage(sender, plugin.getConfigManager().getMessage("cleanup-none"));
+                return;
+            }
+            String senderKey = sender instanceof Player p ? p.getUniqueId().toString() : "CONSOLE";
+            pendingCleanups.put(senderKey, orphans);
+            sendMessage(sender, plugin.getConfigManager().getMessage("cleanup-list-header"));
+            int i = 1;
+            for (var o : orphans) {
+                sendMessage(sender, plugin.getConfigManager().getMessage("cleanup-list-item",
+                        "index", String.valueOf(i++),
+                        "name", o.getName(),
+                        "key", o.getKey()));
+            }
+            sendMessage(sender, plugin.getConfigManager().getMessage("cleanup-prompt", "count", String.valueOf(orphans.size())));
+        });
+        return true;
+    }
+
     // ==================== 重载命令 ====================
 
     private boolean handleReload(CommandSender sender) {
@@ -730,6 +783,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-border"));
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-unlock"));
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-lock"));
+            sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-cleanup"));
             sendMessage(sender, plugin.getConfigManager().getMessage("usage.reload"));
         }
     }
@@ -742,6 +796,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-border"));
         sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-unlock"));
         sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-lock"));
+        sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-cleanup"));
         sendMessage(sender, plugin.getConfigManager().getMessage("usage.reload"));
     }
 
@@ -831,7 +886,7 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                 case "admin" -> {
                     if (sender.hasPermission(PERM_ADMIN)) {
                         List<String> adminSubs = isBranchMode()
-                                ? List.of("tp") : List.of("create", "delete", "tp", "border", "unlock", "lock");
+                                ? List.of("tp") : List.of("create", "delete", "tp", "border", "unlock", "lock", "cleanup");
                         for (String sub : adminSubs) {
                             if (sub.startsWith(input)) {
                                 completions.add(sub);
@@ -890,6 +945,11 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                                     completions.add(name);
                                 }
                             }
+                        }
+                        case "cleanup" -> {
+                            // /homeland admin cleanup confirm
+                            String input = args[2].toLowerCase();
+                            if ("confirm".startsWith(input)) completions.add("confirm");
                         }
                     }
                 }

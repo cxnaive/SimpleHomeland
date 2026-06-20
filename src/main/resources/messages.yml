@@ -70,6 +70,7 @@ usage:
   admin-border: "&e/homeland admin border <玩家> <名称> expand &7- 扩展边界"
   admin-unlock: "&e/homeland admin unlock <玩家> <名称> <nether|end> &7- 解锁维度"
   admin-lock: "&e/homeland admin lock <玩家> <名称> <nether|end> &7- 删除维度"
+  admin-cleanup: "&e/homeland admin cleanup &7- 扫描并清理孤儿家园世界"
   invite: "&e/homeland invite <名称> <玩家> &7- 邀请玩家进入家园"
   uninvite: "&e/homeland uninvite <名称> <玩家> &7- 取消邀请"
   public: "&e/homeland public <名称> &7- 切换公开/私有"
@@ -341,3 +342,12 @@ branch-mode-gui: "&c此操作仅限主服务器，请在主服务器上执行。
 branch-teleporting: "&a正在将你传送到主服务器..."
 branch-transfer-failed: "&c跨服传送失败，请稍后再试。"
 redis-connect-failed: "&cRedis 连接失败: {error}"
+
+# 孤儿世界清理
+cleanup-none: "&a没有发现孤儿世界"
+cleanup-list-header: "&6发现以下孤儿世界（磁盘存在但数据库未注册）："
+cleanup-list-item: "&7{index}. &f{name} &8({key})"
+cleanup-prompt: "&e再次执行 &f/homeland admin cleanup confirm &e确认删除以上 {count} 个世界"
+cleanup-no-pending: "&c没有待删除的孤儿世界，请先执行 /homeland admin cleanup"
+cleanup-deleting: "&e正在删除 {count} 个孤儿世界..."
+cleanup-result: "&a清理完成：成功 {success}，失败 {failed}"

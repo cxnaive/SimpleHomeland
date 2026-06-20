@@ -2883,6 +2883,151 @@ public class HomelandManager {
         });
     }
 
+    // ==================== 孤儿世界清理 ====================
+
+    /**
+     * 孤儿世界信息：磁盘上存在但数据库未注册的家园世界。
+     */
+    public static class OrphanWorld {
+        private final String key;
+        private final String name;
+
+        public OrphanWorld(String key, String name) {
+            this.key = key;
+            this.name = name;
+        }
+
+        public String getKey() { return key; }
+        public String getName() { return name; }
+    }
+
+    private static final java.util.regex.Pattern HOMELAND_KEY_PATTERN =
+            java.util.regex.Pattern.compile("^homeland_[0-9a-f]{8}_\\d+(_nether|_the_end)?$");
+
+    /**
+     * 扫描 homelands 目录中所有 key 符合家园命名规范但未在数据库注册的世界。
+     * 此方法执行文件 I/O，应在异步线程调用。
+     */
+    public List<OrphanWorld> scanOrphanWorlds() {
+        List<OrphanWorld> orphans = new ArrayList<>();
+        WorldsProvider provider = plugin.getWorldsProvider();
+        if (provider == null) return orphans;
+
+        Path homelandsDir = provider.levelView().getWorldContainer().resolve("homelands");
+        if (!Files.isDirectory(homelandsDir)) return orphans;
+
+        try (var stream = Files.list(homelandsDir)) {
+            List<Path> dirs = stream.filter(Files::isDirectory).toList();
+            for (Path path : dirs) {
+                String folderName = path.getFileName().toString();
+                if (!HOMELAND_KEY_PATTERN.matcher(folderName).matches()) continue;
+                if (!provider.levelView().isLevel(path)) continue;
+                // 已在数据库注册 → 跳过
+                if (getHomelandByWorldKey(folderName) != null) continue;
+
+                String displayName = folderName;
+                try {
+                    var opt = provider.levelView().read(path);
+                    if (opt.isPresent()) {
+                        String n = opt.get().name();
+                        if (n != null && !n.isEmpty()) displayName = n;
+                    }
+                } catch (Exception ignored) {
+                }
+                orphans.add(new OrphanWorld(folderName, displayName));
+            }
+        } catch (IOException e) {
+            plugin.getLogger().warning("扫描孤儿世界失败: " + e.getMessage());
+        }
+        return orphans;
+    }
+
+    /**
+     * 批量删除孤儿世界。逐个顺序处理（避免并发加载冲突），全部完成后回调。
+     * onComplete 回调在 global region thread 上执行：accept(成功数, 失败数)。
+     */
+    public void deleteOrphanWorlds(List<OrphanWorld> orphans, java.util.function.BiConsumer<Integer, Integer> onComplete) {
+        WorldsProvider provider = plugin.getWorldsProvider();
+        if (provider == null || orphans.isEmpty()) {
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> onComplete.accept(0, 0));
+            return;
+        }
+
+        // 必须在 global region thread 上执行世界加载/删除操作
+        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+            final int[] counters = {0, 0}; // [success, fail]
+            final int total = orphans.size();
+            final int[] index = {0};
+
+            Runnable processNext = new Runnable() {
+                @Override
+                public void run() {
+                    if (index[0] >= total) {
+                        onComplete.accept(counters[0], counters[1]);
+                        return;
+                    }
+                    OrphanWorld orphan = orphans.get(index[0]);
+                    index[0]++;
+                    deleteOneOrphan(provider, orphan, success -> {
+                        if (success) counters[0]++;
+                        else counters[1]++;
+                        // 继续处理下一个（仍在 global region thread）
+                        Bukkit.getGlobalRegionScheduler().execute(plugin, this);
+                    });
+                }
+            };
+            processNext.run();
+        });
+    }
+
+    private void deleteOneOrphan(WorldsProvider provider, OrphanWorld orphan, Consumer<Boolean> onDone) {
+        World loaded = Bukkit.getWorld(new NamespacedKey("simplehomeland", orphan.getKey()));
+        if (loaded != null) {
+            doDeleteOrphan(provider, loaded, onDone);
+            return;
+        }
+        // 未加载：读取并加载后再删除
+        Path path = provider.levelView().getWorldContainer().resolve("homelands/" + orphan.getKey());
+        var opt = provider.levelView().read(path);
+        if (opt.isEmpty()) {
+            onDone.accept(false);
+            return;
+        }
+        try {
+            Level level = opt.get().build();
+            level.createAsync().thenAccept(world -> {
+                Bukkit.getGlobalRegionScheduler().execute(plugin, () -> doDeleteOrphan(provider, world, onDone));
+            }).exceptionally(throwable -> {
+                plugin.getLogger().warning("加载孤儿世界失败: " + orphan.getKey() + " - " + throwable.getMessage());
+                onDone.accept(false);
+                return null;
+            });
+        } catch (Exception e) {
+            plugin.getLogger().warning("处理孤儿世界失败: " + orphan.getKey() + " - " + e.getMessage());
+            onDone.accept(false);
+        }
+    }
+
+    private void doDeleteOrphan(WorldsProvider provider, World world, Consumer<Boolean> onDone) {
+        try {
+            provider.levelView().deleteAsync(world, false).thenAccept(result -> {
+                if (result.isSuccess()) {
+                    plugin.getLogger().info("已删除孤儿世界: " + world.getName());
+                } else {
+                    plugin.getLogger().warning("删除孤儿世界失败: " + world.getName() + " - " + result);
+                }
+                onDone.accept(result.isSuccess());
+            }).exceptionally(throwable -> {
+                plugin.getLogger().warning("删除孤儿世界异常: " + world.getName() + " - " + throwable.getMessage());
+                onDone.accept(false);
+                return null;
+            });
+        } catch (Exception e) {
+            plugin.getLogger().warning("删除孤儿世界异常: " + world.getName() + " - " + e.getMessage());
+            onDone.accept(false);
+        }
+    }
+
     // ==================== 游戏规则 ====================
 
     @SuppressWarnings("deprecation")
