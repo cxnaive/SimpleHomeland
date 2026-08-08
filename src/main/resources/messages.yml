@@ -351,3 +351,6 @@ cleanup-prompt: "&e再次执行 &f/homeland admin cleanup confirm &e确认删除
 cleanup-no-pending: "&c没有待删除的孤儿世界，请先执行 /homeland admin cleanup"
 cleanup-deleting: "&e正在删除 {count} 个孤儿世界..."
 cleanup-result: "&a清理完成：成功 {success}，失败 {failed}"
+
+# 重连原地恢复
+homeland-rejoin-loading: "&e正在加载你的家园世界，请稍候..."

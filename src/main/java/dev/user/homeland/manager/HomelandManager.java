@@ -26,6 +26,7 @@ import org.bukkit.World;
 import org.bukkit.WorldBorder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -827,6 +828,71 @@ public class HomelandManager {
             });
         }).exceptionally(throwable -> {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "加载家园世界失败: " + throwable.getMessage(), throwable);
+            callback.accept(null);
+            return null;
+        });
+    }
+
+    /**
+     * 按完整 worldKey 加载家园世界（主世界或子维度）。
+     * 主世界应用对应生成器；子维度（nether/end）保留 level.dat 中的维度生成器。
+     */
+    public void loadHomelandWorldByKey(String worldKey, Consumer<World> callback) {
+        Homeland homeland = getHomelandByWorldKey(worldKey);
+        if (homeland == null) {
+            callback.accept(null);
+            return;
+        }
+        if (worldKey.equals(homeland.getWorldKey())) {
+            loadHomelandWorldAsync(homeland, callback);
+        } else {
+            loadHomelandDimensionAsync(worldKey, homeland, callback);
+        }
+    }
+
+    /**
+     * 加载家园子维度（nether/end）。不应用主世界生成器，保留 level.dat 维度生成器。
+     */
+    private void loadHomelandDimensionAsync(String worldKey, Homeland homeland, Consumer<World> callback) {
+        World existing = getHomelandWorld(worldKey);
+        if (existing != null) {
+            touchLastPlayerTime(homeland.getWorldKey());
+            callback.accept(existing);
+            return;
+        }
+
+        WorldsProvider provider = plugin.getWorldsProvider();
+        if (provider == null) {
+            callback.accept(null);
+            return;
+        }
+
+        java.nio.file.Path worldPath = provider.levelView().getWorldContainer().resolve("homelands/" + worldKey);
+        var builderOpt = provider.levelView().read(worldPath);
+        if (builderOpt.isEmpty()) {
+            callback.accept(null);
+            return;
+        }
+
+        Level level = builderOpt.get().build();
+        if (!level.isWorldKnown()) {
+            callback.accept(null);
+            return;
+        }
+
+        level.createAsync().thenAccept(world -> {
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                world.setAutoSave(true);
+                provider.levelView().setEnabled(world, true);
+                int radius = homeland.getBorderRadius() * 2;
+                world.getWorldBorder().setCenter(0, 0);
+                world.getWorldBorder().setSize(radius);
+                touchLastPlayerTime(homeland.getWorldKey());
+                publishLoadedWorlds();
+                callback.accept(world);
+            });
+        }).exceptionally(throwable -> {
+            plugin.getLogger().warning("加载家园维度失败: " + worldKey + " - " + throwable.getMessage());
             callback.accept(null);
             return null;
         });
@@ -3271,19 +3337,175 @@ public class HomelandManager {
      * 如果在无权进入的家园世界中，传送回主世界。
      */
     private void checkAndEjectAfterLoad(Player player) {
-        org.bukkit.World world = player.getWorld();
-        String worldKey = world.getKey().getKey();
-        Homeland homeland = worldKeyIndex.get(worldKey);
-        if (homeland == null) return; // 非家园世界
+        // 优先读取 PDC 中记录的"离开位置"（从 homeland 下线后的重连恢复候选）
+        QuitLocation quit = readQuitLocation(player);
 
-        if (!canEnterWorld(player, worldKey)) {
+        String targetWorldKey;
+        if (quit != null) {
+            targetWorldKey = quit.worldKey();
+        } else {
+            targetWorldKey = player.getWorld().getKey().getKey();
+        }
+
+        Homeland homeland = worldKeyIndex.get(targetWorldKey);
+        if (homeland == null) {
+            // 目标非家园：清除可能的 PDC 记录后放行
+            clearQuitLocation(player);
+            return;
+        }
+
+        if (!canEnterWorld(player, targetWorldKey)) {
+            // 无权进入 → 踢出大厅
             org.bukkit.World mainWorld = plugin.getServer().getWorlds().get(0);
             player.getScheduler().execute(plugin, () -> {
                 player.teleportAsync(mainWorld.getSpawnLocation());
                 MessageUtil.send(player, plugin.getConfigManager().getMessage("homeland-eject"));
             }, () -> {}, 1L);
+            clearQuitLocation(player);
+            return;
+        }
+
+        // 有权进入
+        if (quit != null) {
+            // 重连恢复候选 → 加载世界并传送回原位置
+            restoreToWorld(player, targetWorldKey, quit.x(), quit.y(), quit.z(), quit.yaw(), quit.pitch());
+            clearQuitLocation(player);
+        }
+        // 非 PDC 候选（玩家已在已加载 homeland 中）：维持现状
+    }
+
+    /**
+     * 原地恢复：确保目标家园世界已加载，并将玩家传送到记录坐标。
+     * 若目标是子维度，必须先确保主世界已加载——否则子维度无法从主世界复制
+     * 游戏规则/难度，也无法建立传送门 link（WorldLoadListener 依赖主世界已加载）。
+     */
+    private void restoreToWorld(Player player, String worldKey, double x, double y, double z, float yaw, float pitch) {
+        Homeland homeland = getHomelandByWorldKey(worldKey);
+        if (homeland == null) return;
+
+        boolean isOverworld = worldKey.equals(homeland.getWorldKey());
+        if (isOverworld) {
+            loadAndTeleport(player, worldKey, x, y, z, yaw, pitch);
+            return;
+        }
+
+        // 子维度：先确保主世界已加载，再加载子维度
+        World overworld = getHomelandWorld(homeland.getWorldKey());
+        if (overworld != null) {
+            loadAndTeleport(player, worldKey, x, y, z, yaw, pitch);
+        } else {
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("homeland-rejoin-loading"));
+            loadHomelandWorldAsync(homeland, ow -> {
+                if (ow == null) return; // 主世界加载失败，留大厅
+                loadAndTeleport(player, worldKey, x, y, z, yaw, pitch);
+            });
         }
     }
+
+    /**
+     * 加载指定家园世界（若未加载）并将玩家传送到记录坐标。
+     */
+    private void loadAndTeleport(Player player, String worldKey, double x, double y, double z, float yaw, float pitch) {
+        World loaded = getHomelandWorld(worldKey);
+        if (loaded != null) {
+            teleportToLocation(player, loaded, x, y, z, yaw, pitch);
+            return;
+        }
+        MessageUtil.send(player, plugin.getConfigManager().getMessage("homeland-rejoin-loading"));
+        loadHomelandWorldByKey(worldKey, world -> {
+            if (world == null) return; // 加载失败，留大厅
+            teleportToLocation(player, world, x, y, z, yaw, pitch);
+        });
+    }
+
+    private void teleportToLocation(Player player, World world, double x, double y, double z, float yaw, float pitch) {
+        player.getScheduler().execute(plugin, () -> {
+            if (player.isOnline()) {
+                player.teleportAsync(new Location(world, x, y, z, yaw, pitch));
+            }
+        }, () -> {}, 1L);
+    }
+
+    // ==================== 重连防坠虚空 ====================
+
+    private static final String QUIT_LOC_KEY = "homeland_quit_location";
+
+    /**
+     * 玩家下线时记录其所在位置（若在 homeland 世界）。
+     * 在 PlayerQuitEvent 中调用，Paper 在其后保存玩家数据，故 PDC 会持久化。
+     */
+    public void recordQuitLocation(Player player) {
+        if (plugin.getConfigManager().isBranchMode()) return;
+
+        String worldKey = player.getWorld().getKey().getKey();
+        if (getHomelandByWorldKey(worldKey) == null) {
+            // 不在 homeland：清除旧记录
+            clearQuitLocation(player);
+            return;
+        }
+
+        Location loc = player.getLocation();
+        String encoded = worldKey + ";" + loc.getX() + ";" + loc.getY() + ";" + loc.getZ()
+                + ";" + loc.getYaw() + ";" + loc.getPitch();
+        player.getPersistentDataContainer().set(
+                new NamespacedKey(plugin, QUIT_LOC_KEY), PersistentDataType.STRING, encoded);
+    }
+
+    /**
+     * 阶段 1（join 时同步调用）：若玩家的目标 homeland 世界未加载，立即停泊大厅以防坠虚空。
+     * 不做权限检查、不传送回去（交给 checkAndEjectAfterLoad 阶段 2）。
+     */
+    public void rescueFromVoidOnJoin(Player player) {
+        if (plugin.getConfigManager().isBranchMode()) return;
+
+        QuitLocation quit = readQuitLocation(player);
+        boolean needRescue = false;
+
+        // 情形 A：有 PDC 记录（上次从 homeland 下线），目标世界当前未加载（卸载或已删除）→ 需停泊大厅
+        if (quit != null && getHomelandWorld(quit.worldKey()) == null) {
+            needRescue = true;
+        } else {
+            // 情形 B（兜底，无 PDC 的旧玩家）：当前世界是 homeland 但实际未加载
+            String currentKey = player.getWorld().getKey().getKey();
+            if (getHomelandByWorldKey(currentKey) != null && getHomelandWorld(currentKey) == null) {
+                needRescue = true;
+            }
+        }
+
+        if (needRescue) {
+            // 关键：必须延迟到下一 tick 执行传送。在 PlayerJoinEvent 期间（placeNewPlayer 尚未完成）
+            // 同步调用 teleportAsync 会触发 "Player is already removed from player chunk loader"。
+            // 延迟 1 tick 等 placeNewPlayer 完成后再传送（与现有 checkAndEject 的 1L 延迟同理）。
+            // 1 tick 的下坠约 0.05 格，不会造成伤害，坠虚空致死需数秒。
+            player.getScheduler().execute(plugin, () -> rescueToMainSpawn(player), () -> {}, 1L);
+        }
+    }
+
+    private void rescueToMainSpawn(Player player) {
+        org.bukkit.World mainWorld = plugin.getServer().getWorlds().get(0);
+        if (mainWorld == null) return;
+        player.teleportAsync(mainWorld.getSpawnLocation());
+    }
+
+    private QuitLocation readQuitLocation(Player player) {
+        String encoded = player.getPersistentDataContainer()
+                .get(new NamespacedKey(plugin, QUIT_LOC_KEY), PersistentDataType.STRING);
+        if (encoded == null) return null;
+        try {
+            String[] p = encoded.split(";");
+            if (p.length != 6) return null;
+            return new QuitLocation(p[0], Double.parseDouble(p[1]), Double.parseDouble(p[2]),
+                    Double.parseDouble(p[3]), Float.parseFloat(p[4]), Float.parseFloat(p[5]));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void clearQuitLocation(Player player) {
+        player.getPersistentDataContainer().remove(new NamespacedKey(plugin, QUIT_LOC_KEY));
+    }
+
+    private record QuitLocation(String worldKey, double x, double y, double z, float yaw, float pitch) {}
 
     /**
      * 检查玩家是否可以进入指定世界

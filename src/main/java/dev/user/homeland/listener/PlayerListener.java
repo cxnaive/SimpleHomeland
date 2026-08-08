@@ -37,6 +37,9 @@ public class PlayerListener implements Listener {
             plugin.getCrossServerManager().onPlayerJoinCheckTeleport(player);
         }
 
+        // 阶段 1：防坠虚空（立即同步），目标 homeland 世界未加载则停泊大厅
+        plugin.getHomelandManager().rescueFromVoidOnJoin(player);
+
         // 延迟1 tick检查，等待家园数据加载完成
         player.getScheduler().execute(plugin, () -> {
             checkAndEject(player);
@@ -46,6 +49,8 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        // 记录离开位置（若在 homeland 世界），供重连原地恢复
+        plugin.getHomelandManager().recordQuitLocation(player);
         plugin.getHomelandManager().onPlayerQuit(player.getUniqueId());
     }
 
