@@ -107,6 +107,16 @@ public class SimpleHomelandPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new HomelandProtectionListener(this), this);
             getServer().getPluginManager().registerEvents(new CommandBlockListener(this), this);
             getServer().getPluginManager().registerEvents(new CustomSettingListener(this), this);
+
+            // CraftEngine 兼容（家具/自定义方块保护）
+            if (getServer().getPluginManager().getPlugin("CraftEngine") != null) {
+                try {
+                    dev.user.homeland.compat.CraftEngineCompat.register(this);
+                    getLogger().info("已接入 CraftEngine 保护（家具/自定义方块）");
+                } catch (Throwable t) {
+                    getLogger().warning("CraftEngine 接入失败: " + t.getMessage());
+                }
+            }
         }
 
         // 注册命令

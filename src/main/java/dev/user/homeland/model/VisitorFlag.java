@@ -24,7 +24,9 @@ public enum VisitorFlag {
     VEHICLE("vehicle", "使用载具", false, Material.MINECART, Category.OTHER),
     BED("bed", "使用床", false, Material.RED_BED, Category.OTHER),
     TRADE("trade", "村民交易", false, Material.EMERALD, Category.OTHER),
-    PROJECTILE("projectile", "投掷/射击", false, Material.BOW, Category.OTHER);
+    PROJECTILE("projectile", "投掷/射击", false, Material.BOW, Category.OTHER),
+    ENTITY("entity", "实体/家具互动", false, Material.ARMOR_STAND, Category.OTHER),
+    ENTITY_DAMAGE("entity_damage", "实体/家具破坏", false, Material.ITEM_FRAME, Category.OTHER);
 
     private final String key;
     private final String displayName;

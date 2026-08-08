@@ -15,6 +15,7 @@ repositories {
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     maven("https://repo.rosewooddev.io/repository/public/")
     maven("https://repo.thenextlvl.net/releases")
+    maven("https://repo.momirealms.net/releases")
 }
 
 dependencies {
@@ -42,6 +43,10 @@ dependencies {
 
     // Redis 客户端 (由服务器通过 plugin.yml libraries 加载)
     compileOnly("redis.clients:jedis:5.1.3")
+
+    // CraftEngine 家具/自定义方块保护 (软依赖, antigrieflib 已内嵌于 CE jar)
+    compileOnly("net.momirealms:craft-engine-core:26.7.4")
+    compileOnly("net.momirealms:craft-engine-bukkit:26.7.4")
 }
 
 tasks.withType<JavaCompile> {

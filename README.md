@@ -31,6 +31,7 @@
 | [PlaceholderAPI](https://modrinth.com/plugin/placeholderapi) | 必需 | 变量解析 |
 | [XConomy](https://modrinth.com/plugin/xconomy) | 可选 | 金币经济 |
 | [PlayerPoints](https://modrinth.com/plugin/playerpoints) | 可选 | 点券经济 |
+| [CraftEngine](https://github.com/Xiao-MoMi/craft-engine) | 可选 | 家具/自定义方块保护 |
 
 ## 安装
 
@@ -105,15 +106,25 @@
 | `%simplehomeland_current_owner%` | 当前家园主人（大厅时显示配置值） |
 | `%simplehomeland_difficulty_<名称>%` | 指定家园难度（peaceful/easy/normal/hard） |
 
-## 访客权限（17 种）
+## 访客权限（19 种）
 
 | 分类 | 权限 | 默认 |
 |------|------|------|
-| 方块 | place（放置）/ break（破坏） | 禁止 |
+| 方块 | place（放置，含倒桶/放置船、矿车、盔甲架等实体）/ break（破坏，含装桶） | 禁止 |
 | 交互 | interact（交互）/ container（容器）/ anvil（铁砧）/ enchant（附魔） | 禁止 |
 | 物品 | pickup（拾取）/ drop（丢弃） | 允许 |
 | 战斗 | kill_animal（攻击动物）/ kill_monster（攻击怪物）/ pvp（对战） | 禁止(动物)/允许(怪物)/禁止(对战) |
-| 其他 | farming（农业）/ vehicle（载具）/ bed（床）/ trade（交易）/ projectile（投掷） | 禁止 |
+| 其他 | farming（农业）/ vehicle（载具）/ bed（床）/ trade（交易）/ projectile（投掷/射击） | 禁止 |
+| 实体/家具 | entity（实体/家具互动：盔甲架换装、展示框旋转、拴绳、坐家具、装桶生物、CraftEngine 家具互动）/ entity_damage（实体/家具破坏：拆除盔甲架、展示框、画、船、矿车、末影水晶、CraftEngine 家具） | 禁止 |
+
+### CraftEngine 集成
+
+安装 CraftEngine 后自动接入其 AntiGrief SPI，无需配置：
+
+- 拆/放 CraftEngine 家具 → 受 `entity_damage` / `place` 约束
+- 右键互动家具（坐沙发、切换形态等）→ 受 `entity` 约束
+- CraftEngine 自定义方块（门、按钮、压力板、容器、储物家具等）→ 受 `interact` / `container` 约束
+- ItemsAdder 等以盔甲架/展示框为载体的家具由通用实体层覆盖，无需额外配置
 
 ## 配置
 

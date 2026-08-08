@@ -12,14 +12,23 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
+import org.bukkit.event.entity.PlayerLeashEntityEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketEntityEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerUnleashEntityEvent;
+import org.bukkit.event.vehicle.VehicleDestroyEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.inventory.InventoryHolder;
 
@@ -59,6 +68,14 @@ public class HomelandProtectionListener implements Listener {
             Material.JUNGLE_TRAPDOOR, Material.ACACIA_TRAPDOOR, Material.DARK_OAK_TRAPDOOR,
             Material.MANGROVE_TRAPDOOR, Material.CHERRY_TRAPDOOR, Material.BAMBOO_TRAPDOOR,
             Material.CRIMSON_TRAPDOOR, Material.WARPED_TRAPDOOR, Material.IRON_TRAPDOOR,
+            // 铜门（1.21）
+            Material.COPPER_DOOR, Material.EXPOSED_COPPER_DOOR, Material.WEATHERED_COPPER_DOOR,
+            Material.OXIDIZED_COPPER_DOOR, Material.WAXED_COPPER_DOOR, Material.WAXED_EXPOSED_COPPER_DOOR,
+            Material.WAXED_WEATHERED_COPPER_DOOR, Material.WAXED_OXIDIZED_COPPER_DOOR,
+            // 铜活板门（1.21）
+            Material.COPPER_TRAPDOOR, Material.EXPOSED_COPPER_TRAPDOOR, Material.WEATHERED_COPPER_TRAPDOOR,
+            Material.OXIDIZED_COPPER_TRAPDOOR, Material.WAXED_COPPER_TRAPDOOR, Material.WAXED_EXPOSED_COPPER_TRAPDOOR,
+            Material.WAXED_WEATHERED_COPPER_TRAPDOOR, Material.WAXED_OXIDIZED_COPPER_TRAPDOOR,
             // 压力板
             Material.STONE_PRESSURE_PLATE, Material.OAK_PRESSURE_PLATE, Material.SPRUCE_PRESSURE_PLATE,
             Material.BIRCH_PRESSURE_PLATE, Material.JUNGLE_PRESSURE_PLATE, Material.ACACIA_PRESSURE_PLATE,
@@ -85,7 +102,8 @@ public class HomelandProtectionListener implements Listener {
             Material.ENDER_CHEST,
             Material.CRAFTER, Material.CHISELED_BOOKSHELF,
             Material.JUKEBOX, Material.LECTERN, Material.LOOM, Material.CARTOGRAPHY_TABLE,
-            Material.GRINDSTONE, Material.STONECUTTER, Material.SMITHING_TABLE
+            Material.GRINDSTONE, Material.STONECUTTER, Material.SMITHING_TABLE,
+            Material.VAULT, Material.DECORATED_POT, Material.FLOWER_POT
     );
 
     /** 铁砧类方块 */
@@ -106,12 +124,12 @@ public class HomelandProtectionListener implements Listener {
             Material.BROWN_BED, Material.GREEN_BED, Material.RED_BED, Material.BLACK_BED
     );
 
-    /** 农业相关：骨粉可作用的方块 */
+    /** 农业相关：骨粉可作用/可收获的方块 */
     private static final Set<Material> FARM_BLOCKS = EnumSet.of(
             Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
             Material.PUMPKIN_STEM, Material.MELON_STEM, Material.TORCHFLOWER_CROP,
-            Material.COCOA, Material.SWEET_BERRY_BUSH, Material.GLOW_BERRIES,
-            Material.NETHER_WART
+            Material.COCOA, Material.SWEET_BERRY_BUSH, Material.CAVE_VINES,
+            Material.NETHER_WART, Material.BEEHIVE, Material.BEE_NEST, Material.CAKE
     );
 
     public HomelandProtectionListener(SimpleHomelandPlugin plugin) {
@@ -296,6 +314,14 @@ public class HomelandProtectionListener implements Listener {
                 event.setCancelled(true);
                 sendDenied(player);
             }
+        } else if (target instanceof ArmorStand || target instanceof Hanging || target instanceof Interaction
+                || target instanceof Display || target instanceof EnderCrystal
+                || target instanceof Boat || target instanceof Minecart) {
+            // 盔甲架/展示框/画/展示实体/末影水晶/载具（含家具实体）
+            if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY_DAMAGE)) {
+                event.setCancelled(true);
+                sendDenied(player);
+            }
         }
     }
 
@@ -328,10 +354,128 @@ public class HomelandProtectionListener implements Listener {
                 event.setCancelled(true);
                 sendDenied(player);
             }
+            return;
+        }
+
+        // 展示实体/家具互动（盔甲架换装、展示框旋转、Interaction 实体等；
+        // PlayerArmorStandManipulateEvent / PlayerInteractAtEntityEvent 是本事件子类，一并覆盖）
+        if (entity instanceof ArmorStand || entity instanceof Hanging || entity instanceof Interaction
+                || entity instanceof Display) {
+            if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY)) {
+                event.setCancelled(true);
+                sendDenied(player);
+            }
+        }
+    }
+
+    // ==================== 桶事件 ====================
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+        Player player = event.getPlayer();
+        String worldKey = event.getBlock().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.PLACE)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onBucketFill(PlayerBucketFillEvent event) {
+        Player player = event.getPlayer();
+        String worldKey = event.getBlock().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.BREAK)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
+
+    /** 装桶抓走生物（鱼/蝾螈/蝌蚪） */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onBucketEntity(PlayerBucketEntityEvent event) {
+        Player player = event.getPlayer();
+        String worldKey = event.getEntity().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
+
+    // ==================== 展示实体/家具事件 ====================
+
+    /** 画/展示框被拆除（攻击路径已由 EntityDamageByEntityEvent 覆盖，这里兜底其他破坏方式） */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onHangingBreak(HangingBreakByEntityEvent event) {
+        Player player = resolvePlayer(event.getRemover());
+        if (player == null) return;
+        String worldKey = event.getEntity().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY_DAMAGE)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
+
+    /** 放置实体（船/矿车/盔甲架/展示框/画/末影水晶等） */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onEntityPlace(EntityPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player == null) return;
+        String worldKey = event.getEntity().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.PLACE)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
+
+    /** 骑乘非载具实体（盔甲架/展示实体座位，即家具"坐下"） */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onEntityMount(EntityMountEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        Entity mount = event.getMount();
+        // 船/矿车/可骑乘动物已由 VehicleEnterEvent(VEHICLE) 覆盖，避免重复拦截
+        if (mount instanceof Vehicle || mount instanceof Animals) return;
+        String worldKey = mount.getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
+
+    // ==================== 拴绳事件 ====================
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onLeash(PlayerLeashEntityEvent event) {
+        Player player = event.getPlayer();
+        String worldKey = event.getEntity().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onUnleash(PlayerUnleashEntityEvent event) {
+        Player player = event.getPlayer();
+        String worldKey = event.getEntity().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY)) {
+            event.setCancelled(true);
+            sendDenied(player);
         }
     }
 
     // ==================== 载具事件 ====================
+
+    /** 拆毁船/矿车 */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onVehicleDestroy(VehicleDestroyEvent event) {
+        Player player = resolvePlayer(event.getAttacker());
+        if (player == null) return;
+        String worldKey = event.getVehicle().getWorld().getKey().getKey();
+        if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.ENTITY_DAMAGE)) {
+            event.setCancelled(true);
+            sendDenied(player);
+        }
+    }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onVehicleEnter(VehicleEnterEvent event) {
@@ -351,7 +495,7 @@ public class HomelandProtectionListener implements Listener {
         String worldKey = player.getWorld().getKey().getKey();
 
         org.bukkit.entity.Projectile proj = event.getEntity();
-        if (proj instanceof Egg || proj instanceof Snowball || proj instanceof EnderPearl
+        if (proj instanceof AbstractArrow || proj instanceof Egg || proj instanceof Snowball || proj instanceof EnderPearl
                 || proj instanceof org.bukkit.entity.ThrownPotion
                 || proj instanceof org.bukkit.entity.Trident) {
             if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.PROJECTILE)) {
