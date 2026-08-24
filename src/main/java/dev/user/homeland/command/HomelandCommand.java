@@ -37,11 +37,15 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
     );
 
     private static final List<String> VALID_WORLD_TYPES = List.of("default", "void", "flat");
+    private static final long DESTRUCTIVE_CONFIRM_TIMEOUT_MILLIS = 30_000L;
 
     private final SimpleHomelandPlugin plugin;
 
     // 孤儿世界清理的待删除列表（per-sender：玩家用 UUID，控制台用 CONSOLE）
     private final Map<String, List<dev.user.homeland.manager.HomelandManager.OrphanWorld>> pendingCleanups = new ConcurrentHashMap<>();
+    private final Map<String, PendingDestructiveCommand> pendingDestructiveCommands = new ConcurrentHashMap<>();
+
+    private record PendingDestructiveCommand(String actionKey, long expiresAt) {}
 
     public HomelandCommand(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
@@ -57,6 +61,30 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
 
     private List<String> getOnlinePlayerNames() {
         return new ArrayList<>(plugin.getCrossServerManager().getAllOnlinePlayers().values());
+    }
+
+    private boolean confirmDestructiveCommand(CommandSender sender, String actionKey,
+                                               String actionDescription, String commandText) {
+        long now = System.currentTimeMillis();
+        pendingDestructiveCommands.entrySet().removeIf(entry -> entry.getValue().expiresAt() < now);
+
+        String senderKey = sender instanceof Player player
+                ? player.getUniqueId().toString()
+                : "NON_PLAYER:" + sender.getClass().getName() + ":" + sender.getName() + ":"
+                        + Integer.toHexString(System.identityHashCode(sender));
+        PendingDestructiveCommand pending = pendingDestructiveCommands.get(senderKey);
+        if (pending != null && pending.actionKey().equals(actionKey) && pending.expiresAt() >= now
+                && pendingDestructiveCommands.remove(senderKey, pending)) {
+            return true;
+        }
+
+        pendingDestructiveCommands.put(senderKey,
+                new PendingDestructiveCommand(actionKey, now + DESTRUCTIVE_CONFIRM_TIMEOUT_MILLIS));
+        sendMessage(sender, plugin.getConfigManager().getMessage("destructive-command-confirm",
+                "action", actionDescription,
+                "seconds", String.valueOf(DESTRUCTIVE_CONFIRM_TIMEOUT_MILLIS / 1000L),
+                "command", commandText));
+        return false;
     }
 
     private boolean isBranchMode() {
@@ -145,6 +173,17 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         }
 
         String name = args[1];
+        if (plugin.getHomelandManager().getHomeland(player.getUniqueId(), name).isEmpty()) {
+            sendMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
+            return true;
+        }
+        String action = plugin.getConfigManager().getMessage(
+                "destructive-action-delete-homeland", "name", name);
+        if (!confirmDestructiveCommand(sender,
+                "delete:" + player.getUniqueId() + ":" + name.toLowerCase(java.util.Locale.ROOT),
+                action, "/homeland delete " + name)) {
+            return true;
+        }
         plugin.getHomelandManager().deleteHomeland(player, name, () -> {}, () -> {});
         return true;
     }
@@ -332,6 +371,12 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
 
         String name = args[1];
         String dimension = args[2].toLowerCase();
+        var optHomeland = plugin.getHomelandManager().getHomeland(player.getUniqueId(), name);
+        if (optHomeland.isEmpty()) {
+            sendMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
+            return true;
+        }
+        Homeland homeland = optHomeland.get();
 
         switch (dimension) {
             case "nether" -> {
@@ -339,11 +384,33 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
                     sendMessage(sender, plugin.getConfigManager().getMessage("no-permission"));
                     return true;
                 }
+                if (!homeland.hasNether()) {
+                    sendMessage(sender, plugin.getConfigManager().getMessage("dimension-not-unlocked"));
+                    return true;
+                }
+                String action = plugin.getConfigManager().getMessage(
+                        "destructive-action-delete-dimension", "name", name, "dimension", "地狱");
+                if (!confirmDestructiveCommand(sender,
+                        "lock:" + player.getUniqueId() + ":" + name.toLowerCase(java.util.Locale.ROOT) + ":nether",
+                        action, "/homeland lock " + name + " nether")) {
+                    return true;
+                }
                 plugin.getHomelandManager().lockNether(player, name, () -> {}, () -> {});
             }
             case "end" -> {
                 if (!player.hasPermission(PERM_UNLOCK_END)) {
                     sendMessage(sender, plugin.getConfigManager().getMessage("no-permission"));
+                    return true;
+                }
+                if (!homeland.hasEnd()) {
+                    sendMessage(sender, plugin.getConfigManager().getMessage("dimension-not-unlocked"));
+                    return true;
+                }
+                String action = plugin.getConfigManager().getMessage(
+                        "destructive-action-delete-dimension", "name", name, "dimension", "末地");
+                if (!confirmDestructiveCommand(sender,
+                        "lock:" + player.getUniqueId() + ":" + name.toLowerCase(java.util.Locale.ROOT) + ":end",
+                        action, "/homeland lock " + name + " end")) {
                     return true;
                 }
                 plugin.getHomelandManager().lockEnd(player, name, () -> {}, () -> {});
@@ -536,15 +603,27 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         }
         UUID targetUuid = offlineTarget.getUniqueId();
 
-        var optHomeland = plugin.getHomelandManager().getHomeland(targetUuid, homelandName);
-        if (optHomeland.isEmpty()) {
-            sendMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
-            return true;
-        }
+        plugin.getHomelandManager().getOrLoadHomelandsAsync(targetUuid, homelands -> {
+            var optHomeland = homelands.stream()
+                    .filter(h -> h.getName().equalsIgnoreCase(homelandName))
+                    .findFirst();
+            if (optHomeland.isEmpty()) {
+                sendMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
+                return;
+            }
 
-        plugin.getHomelandManager().deleteHomelandAdmin(sender, targetUuid, homelandName,
-                () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-success", "player", targetName, "name", homelandName)),
-                () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-failed")));
+            String action = plugin.getConfigManager().getMessage("destructive-action-admin-delete-homeland",
+                    "player", targetName, "name", homelandName);
+            if (!confirmDestructiveCommand(sender,
+                    "admin-delete:" + targetUuid + ":" + homelandName.toLowerCase(java.util.Locale.ROOT),
+                    action, "/homeland admin delete " + targetName + " " + homelandName)) {
+                return;
+            }
+
+            plugin.getHomelandManager().deleteHomelandAdmin(sender, targetUuid, homelandName,
+                    () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-success", "player", targetName, "name", homelandName)),
+                    () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-failed")));
+        }, () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-failed")));
         return true;
     }
 
@@ -601,7 +680,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
 
         // 先加载目标玩家的家园缓存
         plugin.getHomelandManager().getOrLoadHomelandsAsync(targetUuid, homelands -> {
-            var optHomeland = plugin.getHomelandManager().getHomeland(targetUuid, homelandName);
+            var optHomeland = homelands.stream()
+                    .filter(h -> h.getName().equalsIgnoreCase(homelandName))
+                    .findFirst();
             if (optHomeland.isEmpty()) {
                 sendMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
                 return;
@@ -638,7 +719,9 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
 
         // 先加载目标玩家的家园缓存
         plugin.getHomelandManager().getOrLoadHomelandsAsync(targetUuid, homelands -> {
-            var optHomeland = plugin.getHomelandManager().getHomeland(targetUuid, homelandName);
+            var optHomeland = homelands.stream()
+                    .filter(h -> h.getName().equalsIgnoreCase(homelandName))
+                    .findFirst();
             if (optHomeland.isEmpty()) {
                 sendMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
                 return;
@@ -680,19 +763,48 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         UUID targetUuid = offlineTarget.getUniqueId();
 
         plugin.getHomelandManager().getOrLoadHomelandsAsync(targetUuid, homelands -> {
-            var optHomeland = plugin.getHomelandManager().getHomeland(targetUuid, homelandName);
+            var optHomeland = homelands.stream()
+                    .filter(h -> h.getName().equalsIgnoreCase(homelandName))
+                    .findFirst();
             if (optHomeland.isEmpty()) {
                 sendMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
                 return;
             }
 
+            Homeland homeland = optHomeland.get();
             switch (dimension) {
-                case "nether" -> plugin.getHomelandManager().lockNetherAdmin(sender, targetUuid, homelandName,
-                        () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-nether-success", "player", targetName, "name", homelandName)),
-                        () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-nether-failed")));
-                case "end" -> plugin.getHomelandManager().lockEndAdmin(sender, targetUuid, homelandName,
-                        () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-end-success", "player", targetName, "name", homelandName)),
-                        () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-end-failed")));
+                case "nether" -> {
+                    if (!homeland.hasNether()) {
+                        sendMessage(sender, plugin.getConfigManager().getMessage("dimension-not-unlocked"));
+                        return;
+                    }
+                    String action = plugin.getConfigManager().getMessage("destructive-action-admin-delete-dimension",
+                            "player", targetName, "name", homelandName, "dimension", "地狱");
+                    if (!confirmDestructiveCommand(sender,
+                            "admin-lock:" + targetUuid + ":" + homelandName.toLowerCase(java.util.Locale.ROOT) + ":nether",
+                            action, "/homeland admin lock " + targetName + " " + homelandName + " nether")) {
+                        return;
+                    }
+                    plugin.getHomelandManager().lockNetherAdmin(sender, targetUuid, homelandName,
+                            () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-nether-success", "player", targetName, "name", homelandName)),
+                            () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-nether-failed")));
+                }
+                case "end" -> {
+                    if (!homeland.hasEnd()) {
+                        sendMessage(sender, plugin.getConfigManager().getMessage("dimension-not-unlocked"));
+                        return;
+                    }
+                    String action = plugin.getConfigManager().getMessage("destructive-action-admin-delete-dimension",
+                            "player", targetName, "name", homelandName, "dimension", "末地");
+                    if (!confirmDestructiveCommand(sender,
+                            "admin-lock:" + targetUuid + ":" + homelandName.toLowerCase(java.util.Locale.ROOT) + ":end",
+                            action, "/homeland admin lock " + targetName + " " + homelandName + " end")) {
+                        return;
+                    }
+                    plugin.getHomelandManager().lockEndAdmin(sender, targetUuid, homelandName,
+                            () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-end-success", "player", targetName, "name", homelandName)),
+                            () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-lock-end-failed")));
+                }
                 default -> sendMessage(sender, plugin.getConfigManager().getMessage("usage.admin-lock"));
             }
         }, () -> {

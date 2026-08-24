@@ -2,6 +2,7 @@ package dev.user.homeland.model;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Collections;
 
 /**
  * 自定义家园设置，存储为 JSON 字符串到数据库。
@@ -9,14 +10,13 @@ import java.util.Map;
  */
 public class CustomSettings {
 
-    private final Map<String, Boolean> settings;
+    private volatile Map<String, Boolean> settings;
+    private long version;
+
+    public record Update(String key, Boolean previousValue, long version) {}
 
     public CustomSettings() {
-        this.settings = new LinkedHashMap<>();
-    }
-
-    private CustomSettings(Map<String, Boolean> settings) {
-        this.settings = settings;
+        this.settings = Map.of();
     }
 
     /**
@@ -37,7 +37,7 @@ public class CustomSettings {
                 if (kv.length != 2) continue;
                 String key = kv[0].trim().replace("\"", "");
                 boolean value = Boolean.parseBoolean(kv[1].trim());
-                result.settings.put(key, value);
+                result.set(key, value);
             }
         } catch (Exception e) {
             // 解析失败，使用空设置
@@ -49,10 +49,11 @@ public class CustomSettings {
      * 序列化为 JSON 字符串。
      */
     public String toJson() {
-        if (settings.isEmpty()) return "{}";
+        Map<String, Boolean> snapshot = settings;
+        if (snapshot.isEmpty()) return "{}";
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
-        for (Map.Entry<String, Boolean> entry : settings.entrySet()) {
+        for (Map.Entry<String, Boolean> entry : snapshot.entrySet()) {
             if (!first) sb.append(",");
             sb.append("\"").append(entry.getKey()).append("\":").append(entry.getValue());
             first = false;
@@ -71,7 +72,30 @@ public class CustomSettings {
     /**
      * 设置某个设置的值。
      */
-    public void set(String key, boolean value) {
-        settings.put(key, value);
+    public synchronized void set(String key, boolean value) {
+        update(key, value);
+    }
+
+    public synchronized Update update(String key, boolean value) {
+        Boolean previousValue = settings.get(key);
+        Map<String, Boolean> updated = new LinkedHashMap<>(settings);
+        updated.put(key, value);
+        settings = Collections.unmodifiableMap(updated);
+        version++;
+        return new Update(key, previousValue, version);
+    }
+
+    public synchronized boolean rollback(Update update) {
+        if (version != update.version()) return false;
+
+        Map<String, Boolean> restored = new LinkedHashMap<>(settings);
+        if (update.previousValue() == null) {
+            restored.remove(update.key());
+        } else {
+            restored.put(update.key(), update.previousValue());
+        }
+        settings = Collections.unmodifiableMap(restored);
+        version++;
+        return true;
     }
 }

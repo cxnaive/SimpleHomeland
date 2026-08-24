@@ -63,6 +63,36 @@ public class HomelandManageGUI extends AbstractGUI {
     }
 
     @Override
+    public GUIAction getAction(int slot) {
+        GUIAction action = super.getAction(slot);
+        int confirmSlot = getPendingConfirmSlot();
+        if (confirmSlot < 0 || slot == confirmSlot) return action;
+
+        return (p, e) -> {
+            clearPendingConfirmations();
+            if (action != null) {
+                action.execute(p, e);
+            } else {
+                refresh();
+            }
+        };
+    }
+
+    private int getPendingConfirmSlot() {
+        if (pendingDelete) return cfg.getDeleteSlot();
+        if (pendingExpand) return cfg.getExpandSlot();
+        if ("nether".equals(pendingLockDimension)) return cfg.getNetherSlot();
+        if ("end".equals(pendingLockDimension)) return cfg.getEndSlot();
+        return -1;
+    }
+
+    private void clearPendingConfirmations() {
+        pendingExpand = false;
+        pendingDelete = false;
+        pendingLockDimension = null;
+    }
+
+    @Override
     public void initialize() {
         actions.clear();
 

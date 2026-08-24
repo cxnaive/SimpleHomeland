@@ -88,7 +88,7 @@ public class HomelandGameRuleGUI extends AbstractGUI {
 
         List<GameRuleConfig> gamerules = config.getEnabledGameruleConfigs();
 
-        if ((overworld == null && gamerules.stream().noneMatch(GameRuleConfig::isCustom)) || gamerules.isEmpty()) {
+        if (overworld == null || gamerules.isEmpty()) {
             setItem(cfg.getEmptySlot(), createEmptyItem(gamerules.isEmpty()), null);
         } else {
             int[] pageSlots = cfg.getPageSlots();
@@ -98,9 +98,6 @@ public class HomelandGameRuleGUI extends AbstractGUI {
                 if (idx >= gamerules.size()) break;
 
                 GameRuleConfig grc = gamerules.get(idx);
-                // 原生规则需要世界已加载才能读取值
-                if (!grc.isCustom() && overworld == null) continue;
-
                 String currentValue = getGameruleValue(overworld, grc, homeland);
                 setItem(pageSlots[i], createGameruleItem(grc, currentValue), (p, e) -> {
                     handleClick(grc, currentValue, p, e);

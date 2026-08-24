@@ -23,6 +23,7 @@ public class HomelandResetTypeGUI extends AbstractGUI {
     private final GUIConfig.Create cfg;
     private final UUID targetUuid;
     private final boolean isAdmin;
+    private String pendingWorldType = null;
 
     private HomelandResetTypeGUI(SimpleHomelandPlugin plugin, Player player, String homelandName,
                                   UUID targetUuid, boolean isAdmin) {
@@ -48,26 +49,57 @@ public class HomelandResetTypeGUI extends AbstractGUI {
 
         ConfigManager config = plugin.getConfigManager();
 
-        // 默认地形
-        setItem(cfg.getDefaultSlot(), createDefaultItem(config), (p, e) -> {
-            close();
-            doReset(p, "default");
-        });
-
-        // 空岛
-        setItem(cfg.getVoidSlot(), createVoidItem(config), (p, e) -> {
-            close();
-            doReset(p, "void");
-        });
-
-        // 超平坦
-        setItem(cfg.getFlatSlot(), createFlatItem(config), (p, e) -> {
-            close();
-            doReset(p, "flat");
-        });
+        setWorldTypeOption(cfg.getDefaultSlot(), "default", config.getMessage("gui.create-type-default-name"),
+                createDefaultItem(config));
+        setWorldTypeOption(cfg.getVoidSlot(), "void", config.getMessage("gui.create-type-void-name"),
+                createVoidItem(config));
+        setWorldTypeOption(cfg.getFlatSlot(), "flat", config.getMessage("gui.create-type-flat-name"),
+                createFlatItem(config));
 
         // 关闭按钮
         setItem(cfg.getCloseSlot(), createCloseItem(), (p, e) -> close());
+    }
+
+    private void setWorldTypeOption(int slot, String worldType, String displayName, ItemStack normalItem) {
+        if (worldType.equals(pendingWorldType)) {
+            setItem(slot, createConfirmItem(displayName), (p, e) -> {
+                pendingWorldType = null;
+                close();
+                doReset(p, worldType);
+            });
+            return;
+        }
+
+        setItem(slot, normalItem, (p, e) -> {
+            pendingWorldType = worldType;
+            refresh();
+        });
+    }
+
+    @Override
+    public GUIAction getAction(int slot) {
+        GUIAction action = super.getAction(slot);
+        int confirmSlot = getPendingConfirmSlot();
+        if (confirmSlot < 0 || slot == confirmSlot) return action;
+
+        return (p, e) -> {
+            pendingWorldType = null;
+            if (action != null) {
+                action.execute(p, e);
+            } else {
+                refresh();
+            }
+        };
+    }
+
+    private int getPendingConfirmSlot() {
+        if (pendingWorldType == null) return -1;
+        return switch (pendingWorldType) {
+            case "default" -> cfg.getDefaultSlot();
+            case "void" -> cfg.getVoidSlot();
+            case "flat" -> cfg.getFlatSlot();
+            default -> -1;
+        };
     }
 
     private void doReset(Player p, String worldType) {
@@ -78,6 +110,27 @@ public class HomelandResetTypeGUI extends AbstractGUI {
             plugin.getHomelandManager().resetOverworld(p, homelandName, worldType,
                     () -> {}, () -> {});
         }
+    }
+
+    private ItemStack createConfirmItem(String worldTypeName) {
+        ItemStack item = new ItemStack(plugin.getConfigManager().getGUIConfig().getReset().getConfirmMaterial());
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        ConfigManager config = plugin.getConfigManager();
+        meta.displayName(MessageUtil.guiName(config.getMessage(
+                "gui.reset-overworld-confirm-name", "type", worldTypeName)));
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        addCostLore(lore, config);
+        lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.reset-overworld-confirm-warning")));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.reset-confirm-click")));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.reset-confirm-cancel")));
+        meta.lore(lore);
+        item.setItemMeta(meta);
+        return item;
     }
 
     private void addCostLore(List<Component> lore, ConfigManager config) {
@@ -107,7 +160,7 @@ public class HomelandResetTypeGUI extends AbstractGUI {
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-default-lore")));
         addCostLore(lore, config);
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
-        lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-click")));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.reset-type-click")));
 
         meta.lore(lore);
         item.setItemMeta(meta);
@@ -126,7 +179,7 @@ public class HomelandResetTypeGUI extends AbstractGUI {
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-void-lore")));
         addCostLore(lore, config);
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
-        lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-click")));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.reset-type-click")));
 
         meta.lore(lore);
         item.setItemMeta(meta);
@@ -145,7 +198,7 @@ public class HomelandResetTypeGUI extends AbstractGUI {
         lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-flat-lore")));
         addCostLore(lore, config);
         lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
-        lore.add(MessageUtil.guiLore(config.getMessage("gui.create-type-click")));
+        lore.add(MessageUtil.guiLore(config.getMessage("gui.reset-type-click")));
 
         meta.lore(lore);
         item.setItemMeta(meta);

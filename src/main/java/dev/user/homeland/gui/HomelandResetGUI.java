@@ -134,6 +134,28 @@ public class HomelandResetGUI extends AbstractGUI {
         setItem(cfg.getCloseSlot(), createCloseItem(), (p, e) -> close());
     }
 
+    @Override
+    public GUIAction getAction(int slot) {
+        GUIAction action = super.getAction(slot);
+        int confirmSlot = getPendingConfirmSlot();
+        if (confirmSlot < 0 || slot == confirmSlot) return action;
+
+        return (p, e) -> {
+            pendingResetDimension = null;
+            if (action != null) {
+                action.execute(p, e);
+            } else {
+                refresh();
+            }
+        };
+    }
+
+    private int getPendingConfirmSlot() {
+        if ("nether".equals(pendingResetDimension)) return cfg.getNetherSlot();
+        if ("end".equals(pendingResetDimension)) return cfg.getEndSlot();
+        return -1;
+    }
+
     private ItemStack createOverworldItem(ConfigManager config) {
         ItemStack item = new ItemStack(cfg.getOverworldMaterial());
         ItemMeta meta = item.getItemMeta();

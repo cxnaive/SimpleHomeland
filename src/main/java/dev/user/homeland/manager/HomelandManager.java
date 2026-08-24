@@ -48,6 +48,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class HomelandManager {
@@ -65,10 +66,50 @@ public class HomelandManager {
     private final ConcurrentHashMap<UUID, Object[]> adminNamingInProgress = new ConcurrentHashMap<>();
     // 记录每个家园世界最后有玩家在线的时间（worldKey -> epoch millis）
     private final ConcurrentHashMap<String, Long> lastPlayerPresentTime = new ConcurrentHashMap<>();
+    // 每个家园同时只允许一个破坏性世界操作（删除/重置/删除维度）。
+    private final ConcurrentHashMap<Integer, String> homelandOperations = new ConcurrentHashMap<>();
     // API 传送时的权限绕过标记，TeleportListener 会检查此集合
     private final Set<UUID> apiBypass = ConcurrentHashMap.newKeySet();
     // 是否为分支模式
     private final boolean branchMode;
+
+    private final class HomelandOperationGuard {
+        private final int homelandId;
+        private final Runnable onSuccess;
+        private final Runnable onFailure;
+        private final AtomicBoolean released = new AtomicBoolean(false);
+
+        private HomelandOperationGuard(int homelandId, Runnable onSuccess, Runnable onFailure) {
+            this.homelandId = homelandId;
+            this.onSuccess = onSuccess;
+            this.onFailure = onFailure;
+        }
+
+        private void success() {
+            if (released.compareAndSet(false, true)) {
+                homelandOperations.remove(homelandId);
+                onSuccess.run();
+            }
+        }
+
+        private void failure() {
+            if (released.compareAndSet(false, true)) {
+                homelandOperations.remove(homelandId);
+                onFailure.run();
+            }
+        }
+    }
+
+    private HomelandOperationGuard acquireHomelandOperation(Homeland homeland, String operation,
+                                                              CommandSender messageTarget,
+                                                              Runnable onSuccess, Runnable onFailure) {
+        if (homelandOperations.putIfAbsent(homeland.getId(), operation) != null) {
+            sendAsyncMessage(messageTarget, plugin.getConfigManager().getMessage("homeland-operation-busy"));
+            onFailure.run();
+            return null;
+        }
+        return new HomelandOperationGuard(homeland.getId(), onSuccess, onFailure);
+    }
 
     public HomelandManager(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
@@ -199,6 +240,9 @@ public class HomelandManager {
             }
             return homelands;
         }, homelands -> {
+            for (Homeland homeland : homelands) {
+                indexHomeland(homeland);
+            }
             callback.accept(homelands);
         }, error -> {
             plugin.getLogger().warning("异步加载家园数据失败: " + error.getMessage());
@@ -220,6 +264,11 @@ public class HomelandManager {
         return worldKeyIndex.values().stream()
                 .filter(h -> h.getOwnerUuid().equals(ownerUuid) && h.getName().equalsIgnoreCase(name))
                 .findFirst();
+    }
+
+    private Optional<Homeland> resolveHomeland(UUID ownerUuid, String name) {
+        Optional<Homeland> cached = getHomeland(ownerUuid, name);
+        return cached.isPresent() ? cached : findHomeland(ownerUuid, name);
     }
 
     public int getHomelandCount(UUID playerUuid) {
@@ -527,14 +576,16 @@ public class HomelandManager {
         }
 
         Homeland homeland = optHomeland.get();
-        deleteHomelandCommon(player, homeland, "homeland-deleted", "delete-homeland", onSuccess, onFailure);
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland, "delete", player, onSuccess, onFailure);
+        if (guard == null) return;
+        deleteHomelandCommon(player, homeland, "homeland-deleted", "delete-homeland", guard::success, guard::failure);
     }
 
     /**
      * 管理员删除家园（不需要玩家在线，仅需要UUID）
      */
     public void deleteHomelandAdmin(CommandSender sender, UUID ownerUuid, String homelandName, Runnable onSuccess, Runnable onFailure) {
-        Optional<Homeland> optHomeland = getHomeland(ownerUuid, homelandName);
+        Optional<Homeland> optHomeland = resolveHomeland(ownerUuid, homelandName);
 
         if (optHomeland.isEmpty()) {
             sendAsyncMessage(sender, plugin.getConfigManager().getMessage("homeland-not-found", "name", homelandName));
@@ -543,7 +594,9 @@ public class HomelandManager {
         }
 
         Homeland homeland = optHomeland.get();
-        deleteHomelandCommon(sender, homeland, "homeland-deleted", "delete-homeland-admin", onSuccess, onFailure);
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland, "delete", sender, onSuccess, onFailure);
+        if (guard == null) return;
+        deleteHomelandCommon(sender, homeland, "homeland-deleted", "delete-homeland-admin", guard::success, guard::failure);
     }
 
     /**
@@ -1713,11 +1766,27 @@ public class HomelandManager {
     // ==================== 解锁地狱 ====================
 
     public void unlockNether(Player player, String name, Runnable onSuccess, Runnable onFailure) {
-        unlockNetherInternal(player, player.getUniqueId(), name, false, player, onSuccess, onFailure);
+        Optional<Homeland> homeland = getHomeland(player.getUniqueId(), name);
+        if (homeland.isEmpty()) {
+            unlockNetherInternal(player, player.getUniqueId(), name, false, player, onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "unlock-nether", player, onSuccess, onFailure);
+        if (guard != null) {
+            unlockNetherInternal(player, player.getUniqueId(), name, false, player, guard::success, guard::failure);
+        }
     }
 
     public void unlockNetherAdmin(CommandSender sender, UUID ownerUuid, String name, Runnable onSuccess, Runnable onFailure) {
-        unlockNetherInternal(sender, ownerUuid, name, true, null, onSuccess, onFailure);
+        Optional<Homeland> homeland = resolveHomeland(ownerUuid, name);
+        if (homeland.isEmpty()) {
+            unlockNetherInternal(sender, ownerUuid, name, true, null, onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "unlock-nether", sender, onSuccess, onFailure);
+        if (guard != null) {
+            unlockNetherInternal(sender, ownerUuid, name, true, null, guard::success, guard::failure);
+        }
     }
 
     private void unlockNetherInternal(CommandSender messageTarget, UUID ownerUuid, String name, boolean skipEconomy, @org.jetbrains.annotations.Nullable Player economyPlayer, Runnable onSuccess, Runnable onFailure) {
@@ -1726,7 +1795,7 @@ public class HomelandManager {
             onFailure.run();
             return;
         }
-        Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
+        Optional<Homeland> optHomeland = resolveHomeland(ownerUuid, name);
 
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
@@ -1851,11 +1920,27 @@ public class HomelandManager {
     // ==================== 解锁末地 ====================
 
     public void unlockEnd(Player player, String name, Runnable onSuccess, Runnable onFailure) {
-        unlockEndInternal(player, player.getUniqueId(), name, false, player, onSuccess, onFailure);
+        Optional<Homeland> homeland = getHomeland(player.getUniqueId(), name);
+        if (homeland.isEmpty()) {
+            unlockEndInternal(player, player.getUniqueId(), name, false, player, onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "unlock-end", player, onSuccess, onFailure);
+        if (guard != null) {
+            unlockEndInternal(player, player.getUniqueId(), name, false, player, guard::success, guard::failure);
+        }
     }
 
     public void unlockEndAdmin(CommandSender sender, UUID ownerUuid, String name, Runnable onSuccess, Runnable onFailure) {
-        unlockEndInternal(sender, ownerUuid, name, true, null, onSuccess, onFailure);
+        Optional<Homeland> homeland = resolveHomeland(ownerUuid, name);
+        if (homeland.isEmpty()) {
+            unlockEndInternal(sender, ownerUuid, name, true, null, onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "unlock-end", sender, onSuccess, onFailure);
+        if (guard != null) {
+            unlockEndInternal(sender, ownerUuid, name, true, null, guard::success, guard::failure);
+        }
     }
 
     private void unlockEndInternal(CommandSender messageTarget, UUID ownerUuid, String name, boolean skipEconomy, @org.jetbrains.annotations.Nullable Player economyPlayer, Runnable onSuccess, Runnable onFailure) {
@@ -1864,7 +1949,7 @@ public class HomelandManager {
             onFailure.run();
             return;
         }
-        Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
+        Optional<Homeland> optHomeland = resolveHomeland(ownerUuid, name);
 
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
@@ -1989,19 +2074,51 @@ public class HomelandManager {
     // ==================== 删除维度 ====================
 
     public void lockNether(Player player, String name, Runnable onSuccess, Runnable onFailure) {
-        lockDimensionInternal(player, player.getUniqueId(), name, "nether", onSuccess, onFailure);
+        Optional<Homeland> homeland = getHomeland(player.getUniqueId(), name);
+        if (homeland.isEmpty()) {
+            lockDimensionInternal(player, player.getUniqueId(), name, "nether", onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "lock-nether", player, onSuccess, onFailure);
+        if (guard != null) {
+            lockDimensionInternal(player, player.getUniqueId(), name, "nether", guard::success, guard::failure);
+        }
     }
 
     public void lockNetherAdmin(CommandSender sender, UUID ownerUuid, String name, Runnable onSuccess, Runnable onFailure) {
-        lockDimensionInternal(sender, ownerUuid, name, "nether", onSuccess, onFailure);
+        Optional<Homeland> homeland = resolveHomeland(ownerUuid, name);
+        if (homeland.isEmpty()) {
+            lockDimensionInternal(sender, ownerUuid, name, "nether", onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "lock-nether", sender, onSuccess, onFailure);
+        if (guard != null) {
+            lockDimensionInternal(sender, ownerUuid, name, "nether", guard::success, guard::failure);
+        }
     }
 
     public void lockEnd(Player player, String name, Runnable onSuccess, Runnable onFailure) {
-        lockDimensionInternal(player, player.getUniqueId(), name, "end", onSuccess, onFailure);
+        Optional<Homeland> homeland = getHomeland(player.getUniqueId(), name);
+        if (homeland.isEmpty()) {
+            lockDimensionInternal(player, player.getUniqueId(), name, "end", onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "lock-end", player, onSuccess, onFailure);
+        if (guard != null) {
+            lockDimensionInternal(player, player.getUniqueId(), name, "end", guard::success, guard::failure);
+        }
     }
 
     public void lockEndAdmin(CommandSender sender, UUID ownerUuid, String name, Runnable onSuccess, Runnable onFailure) {
-        lockDimensionInternal(sender, ownerUuid, name, "end", onSuccess, onFailure);
+        Optional<Homeland> homeland = resolveHomeland(ownerUuid, name);
+        if (homeland.isEmpty()) {
+            lockDimensionInternal(sender, ownerUuid, name, "end", onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "lock-end", sender, onSuccess, onFailure);
+        if (guard != null) {
+            lockDimensionInternal(sender, ownerUuid, name, "end", guard::success, guard::failure);
+        }
     }
 
     private void lockDimensionInternal(CommandSender messageTarget, UUID ownerUuid, String name,
@@ -2011,7 +2128,7 @@ public class HomelandManager {
             onFailure.run();
             return;
         }
-        Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
+        Optional<Homeland> optHomeland = resolveHomeland(ownerUuid, name);
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
             onFailure.run();
@@ -2031,6 +2148,8 @@ public class HomelandManager {
             onFailure.run();
             return;
         }
+
+        // 通过公共入口传入的回调已持有操作锁；此方法只负责执行世界操作。
 
         ConfigManager config = plugin.getConfigManager();
         String suffix = isNether ? "_nether" : "_the_end";
@@ -2061,37 +2180,54 @@ public class HomelandManager {
                     if (overworld != null) {
                         provider.linkProvider().unlink(overworld, dimWorld);
                     }
-
-                    // 删除维度世界
-                    provider.levelView().deleteAsync(dimWorld, false);
                 }
 
-                // 更新数据库
                 String column = isNether ? "has_nether" : "has_end";
-                plugin.getDatabaseQueue().submit("lock-dimension", conn -> {
-                    try (PreparedStatement stmt = conn.prepareStatement(
-                            "UPDATE homeland SET " + column + " = FALSE WHERE id = ?")) {
-                        stmt.setInt(1, homeland.getId());
-                        stmt.executeUpdate();
-                    }
-                    return null;
-                }, result -> {
-                    // 更新内存状态
-                    if (isNether) {
-                        homeland.setHasNether(false);
-                    } else {
-                        homeland.setHasEnd(false);
-                    }
-                    worldKeyIndex.remove(dimWorldKey);
+                Runnable updateState = () -> plugin.getDatabaseQueue().submit("lock-dimension", conn -> {
+                        try (PreparedStatement stmt = conn.prepareStatement(
+                                "UPDATE homeland SET " + column + " = FALSE WHERE id = ?")) {
+                            stmt.setInt(1, homeland.getId());
+                            stmt.executeUpdate();
+                        }
+                        return null;
+                    }, result -> {
+                        if (isNether) {
+                            homeland.setHasNether(false);
+                        } else {
+                            homeland.setHasEnd(false);
+                        }
+                        worldKeyIndex.remove(dimWorldKey);
 
-                    String msgKey = isNether ? "nether-locked" : "end-locked";
-                    sendAsyncMessage(messageTarget, config.getMessage(msgKey, "name", homeland.getName()));
-                    onSuccess.run();
-                }, error -> {
-                    plugin.getLogger().warning("删除维度数据库更新失败: " + error.getMessage());
+                        String msgKey = isNether ? "nether-locked" : "end-locked";
+                        sendAsyncMessage(messageTarget, config.getMessage(msgKey, "name", homeland.getName()));
+                        onSuccess.run();
+                    }, error -> {
+                        plugin.getLogger().warning("删除维度数据库更新失败: " + error.getMessage());
+                        String failKey = isNether ? "lock-nether-failed" : "lock-end-failed";
+                        sendAsyncMessage(messageTarget, config.getMessage(failKey));
+                        onFailure.run();
+                    });
+
+                if (dimWorld == null) {
+                    updateState.run();
+                    return;
+                }
+
+                provider.levelView().deleteAsync(dimWorld, false).thenAccept(result -> {
+                    if (!result.isSuccess()) {
+                        plugin.getLogger().warning("删除维度世界失败: " + dimWorld.getName() + " - " + result);
+                        String failKey = isNether ? "lock-nether-failed" : "lock-end-failed";
+                        sendAsyncMessage(messageTarget, config.getMessage(failKey));
+                        onFailure.run();
+                        return;
+                    }
+                    updateState.run();
+                }).exceptionally(throwable -> {
+                    plugin.getLogger().warning("删除维度世界异常: " + dimWorld.getName() + " - " + throwable.getMessage());
                     String failKey = isNether ? "lock-nether-failed" : "lock-end-failed";
                     sendAsyncMessage(messageTarget, config.getMessage(failKey));
                     onFailure.run();
+                    return null;
                 });
             } catch (Exception e) {
                 plugin.getLogger().log(java.util.logging.Level.SEVERE, "删除维度失败: " + e.getMessage(), e);
@@ -2105,11 +2241,27 @@ public class HomelandManager {
     // ==================== 重置世界 ====================
 
     public void resetOverworld(Player player, String name, String worldTypeKey, Runnable onSuccess, Runnable onFailure) {
-        resetOverworldInternal(player, player.getUniqueId(), name, worldTypeKey, false, onSuccess, onFailure);
+        Optional<Homeland> homeland = getHomeland(player.getUniqueId(), name);
+        if (homeland.isEmpty()) {
+            resetOverworldInternal(player, player.getUniqueId(), name, worldTypeKey, false, onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "reset-overworld", player, onSuccess, onFailure);
+        if (guard != null) {
+            resetOverworldInternal(player, player.getUniqueId(), name, worldTypeKey, false, guard::success, guard::failure);
+        }
     }
 
     public void resetOverworldAdmin(CommandSender admin, UUID ownerUuid, String name, String worldTypeKey, Runnable onSuccess, Runnable onFailure) {
-        resetOverworldInternal(admin, ownerUuid, name, worldTypeKey, true, onSuccess, onFailure);
+        Optional<Homeland> homeland = resolveHomeland(ownerUuid, name);
+        if (homeland.isEmpty()) {
+            resetOverworldInternal(admin, ownerUuid, name, worldTypeKey, true, onSuccess, onFailure);
+            return;
+        }
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), "reset-overworld", admin, onSuccess, onFailure);
+        if (guard != null) {
+            resetOverworldInternal(admin, ownerUuid, name, worldTypeKey, true, guard::success, guard::failure);
+        }
     }
 
     private void resetOverworldInternal(CommandSender messageTarget, UUID ownerUuid, String name,
@@ -2119,7 +2271,7 @@ public class HomelandManager {
             onFailure.run();
             return;
         }
-        Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
+        Optional<Homeland> optHomeland = resolveHomeland(ownerUuid, name);
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
             onFailure.run();
@@ -2128,6 +2280,8 @@ public class HomelandManager {
 
         Homeland homeland = optHomeland.get();
         ConfigManager config = plugin.getConfigManager();
+
+        // 通过公共入口传入的回调已持有操作锁；此方法只负责执行世界操作。
 
         // 扣费
         final double moneyCost;
@@ -2439,11 +2593,29 @@ public class HomelandManager {
     }
 
     public void resetDimension(Player player, String name, String dimension, Runnable onSuccess, Runnable onFailure) {
-        resetDimensionInternal(player, player.getUniqueId(), name, dimension, false, onSuccess, onFailure);
+        Optional<Homeland> homeland = getHomeland(player.getUniqueId(), name);
+        if (homeland.isEmpty()) {
+            resetDimensionInternal(player, player.getUniqueId(), name, dimension, false, onSuccess, onFailure);
+            return;
+        }
+        String operation = "reset-" + dimension.toLowerCase(java.util.Locale.ROOT);
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), operation, player, onSuccess, onFailure);
+        if (guard != null) {
+            resetDimensionInternal(player, player.getUniqueId(), name, dimension, false, guard::success, guard::failure);
+        }
     }
 
     public void resetDimensionAdmin(CommandSender admin, UUID ownerUuid, String name, String dimension, Runnable onSuccess, Runnable onFailure) {
-        resetDimensionInternal(admin, ownerUuid, name, dimension, true, onSuccess, onFailure);
+        Optional<Homeland> homeland = resolveHomeland(ownerUuid, name);
+        if (homeland.isEmpty()) {
+            resetDimensionInternal(admin, ownerUuid, name, dimension, true, onSuccess, onFailure);
+            return;
+        }
+        String operation = "reset-" + dimension.toLowerCase(java.util.Locale.ROOT);
+        HomelandOperationGuard guard = acquireHomelandOperation(homeland.get(), operation, admin, onSuccess, onFailure);
+        if (guard != null) {
+            resetDimensionInternal(admin, ownerUuid, name, dimension, true, guard::success, guard::failure);
+        }
     }
 
     private void resetDimensionInternal(CommandSender messageTarget, UUID ownerUuid, String name,
@@ -2453,7 +2625,7 @@ public class HomelandManager {
             onFailure.run();
             return;
         }
-        Optional<Homeland> optHomeland = getHomeland(ownerUuid, name);
+        Optional<Homeland> optHomeland = resolveHomeland(ownerUuid, name);
         if (optHomeland.isEmpty()) {
             MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("homeland-not-found", "name", name));
             onFailure.run();
@@ -3148,7 +3320,7 @@ public class HomelandManager {
 
         World overworld = getHomelandWorld(worldKey);
         if (overworld == null) {
-            MessageUtil.send(player, plugin.getConfigManager().getMessage("gamerule-world-not-loaded"));
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("gui.gamerule-world-not-loaded"));
             onFailure.run();
             return;
         }
@@ -3188,7 +3360,7 @@ public class HomelandManager {
 
         World overworld = getHomelandWorld(worldKey);
         if (overworld == null) {
-            MessageUtil.send(player, plugin.getConfigManager().getMessage("gamerule-world-not-loaded"));
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("gui.gamerule-world-not-loaded"));
             onFailure.run();
             return;
         }
@@ -3237,7 +3409,7 @@ public class HomelandManager {
 
         World overworld = getHomelandWorld(worldKey);
         if (overworld == null) {
-            MessageUtil.send(player, plugin.getConfigManager().getMessage("difficulty-world-not-loaded"));
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("gui.difficulty-world-not-loaded"));
             onFailure.run();
             return;
         }
@@ -3277,7 +3449,7 @@ public class HomelandManager {
 
         World overworld = getHomelandWorld(worldKey);
         if (overworld == null) {
-            MessageUtil.send(player, plugin.getConfigManager().getMessage("difficulty-world-not-loaded"));
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("gui.difficulty-world-not-loaded"));
             onFailure.run();
             return;
         }
@@ -3619,24 +3791,34 @@ public class HomelandManager {
         }
 
         Homeland homeland = optHomeland.get();
-        homeland.getCustomSettings().set(key, value);
-        String json = homeland.getCustomSettings().toJson();
-
-        plugin.getDatabaseQueue().submit("update-custom-setting-" + homeland.getId(), conn -> {
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "UPDATE homeland SET custom_settings = ? WHERE id = ?")) {
-                stmt.setString(1, json);
-                stmt.setInt(2, homeland.getId());
-                stmt.executeUpdate();
-            }
-            return null;
-        }, result -> {
-            onSuccess.run();
-        }, error -> {
-            plugin.getLogger().warning("更新自定义设置失败: " + error.getMessage());
-            homeland.getCustomSettings().set(key, !value);
+        if (getHomelandWorld(homeland.getWorldKey()) == null) {
+            MessageUtil.send(messageTarget, plugin.getConfigManager().getMessage("gui.gamerule-world-not-loaded"));
             onFailure.run();
-        });
+            return;
+        }
+
+        CustomSettings settings = homeland.getCustomSettings();
+        synchronized (settings) {
+            CustomSettings.Update update = settings.update(key, value);
+            String json = settings.toJson();
+
+            // 入队也放在同一个临界区，确保多区域线程的持久化顺序与内存版本一致。
+            plugin.getDatabaseQueue().submit("update-custom-setting-" + homeland.getId(), conn -> {
+                try (PreparedStatement stmt = conn.prepareStatement(
+                        "UPDATE homeland SET custom_settings = ? WHERE id = ?")) {
+                    stmt.setString(1, json);
+                    stmt.setInt(2, homeland.getId());
+                    stmt.executeUpdate();
+                }
+                return null;
+            }, result -> {
+                onSuccess.run();
+            }, error -> {
+                plugin.getLogger().warning("更新自定义设置失败: " + error.getMessage());
+                settings.rollback(update);
+                onFailure.run();
+            });
+        }
     }
 
     /**
@@ -3974,6 +4156,7 @@ public class HomelandManager {
         worldKeyIndex.clear();
         playerInvites.clear();
         lastPlayerPresentTime.clear();
+        homelandOperations.clear();
     }
 
     // ==================== 工具方法 ====================

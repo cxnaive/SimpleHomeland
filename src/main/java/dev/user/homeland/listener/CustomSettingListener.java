@@ -20,13 +20,16 @@ public class CustomSettingListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockFade(BlockFadeEvent event) {
         Material type = event.getBlock().getType();
         // 只处理冰和雪层
         if (type != Material.ICE && type != Material.SNOW && type != Material.FROSTED_ICE) return;
 
-        String worldKey = event.getBlock().getWorld().getKey().getKey();
+        var namespacedKey = event.getBlock().getWorld().getKey();
+        if (!"simplehomeland".equals(namespacedKey.getNamespace())) return;
+
+        String worldKey = namespacedKey.getKey();
         Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(worldKey);
         if (homeland == null) return; // 非家园世界
 
