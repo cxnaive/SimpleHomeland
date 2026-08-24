@@ -7,6 +7,7 @@ import dev.user.homeland.config.ConfigManager;
 
 import java.io.File;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -114,21 +115,13 @@ public class DatabaseManager {
                 // 约束已存在，忽略
             }
 
-            // 迁移：为已有表添加 world_uuid 列
-            try {
-                stmt.execute("ALTER TABLE homeland ADD COLUMN world_uuid VARCHAR(36)");
-                plugin.getLogger().info("已添加 world_uuid 列");
-            } catch (SQLException e) {
-                // 列已存在，忽略
-            }
-
-            // 迁移：为已有表添加 world_type 列
-            try {
-                stmt.execute("ALTER TABLE homeland ADD COLUMN world_type VARCHAR(16) DEFAULT 'default'");
-                plugin.getLogger().info("已添加 world_type 列");
-            } catch (SQLException e) {
-                // 列已存在，忽略
-            }
+            addColumnIfMissing(conn, stmt, "homeland", "world_uuid", "VARCHAR(36)");
+            addColumnIfMissing(conn, stmt, "homeland", "world_type",
+                    "VARCHAR(16) DEFAULT 'default'");
+            addColumnIfMissing(conn, stmt, "homeland", "overworld_reset_pending",
+                    "BOOLEAN DEFAULT FALSE");
+            addColumnIfMissing(conn, stmt, "homeland", "overworld_reset_previous_uuid",
+                    "VARCHAR(36)");
 
             // 索引
             String[][] indexes = {
@@ -168,6 +161,12 @@ public class DatabaseManager {
                     ")";
             stmt.execute(inviteTable);
 
+            String cleanupTable = "CREATE TABLE IF NOT EXISTS homeland_world_cleanup (" +
+                    "    world_key VARCHAR(64) PRIMARY KEY," +
+                    "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                    ")";
+            stmt.execute(cleanupTable);
+
             String[][] inviteIndexes = {
                     {"idx_invite_homeland", "homeland_invite", "homeland_id"},
                     {"idx_invite_player", "homeland_invite", "player_uuid"}
@@ -192,26 +191,10 @@ public class DatabaseManager {
                 }
             }
 
-            // 兼容旧库：添加 is_public 列
-            try {
-                stmt.execute("ALTER TABLE homeland ADD COLUMN is_public BOOLEAN DEFAULT FALSE");
-            } catch (SQLException ignored) {
-                // 列已存在，忽略
-            }
-
-            // 兼容旧库：添加 visitor_flags 列
-            try {
-                stmt.execute("ALTER TABLE homeland ADD COLUMN visitor_flags TEXT");
-            } catch (SQLException ignored) {
-                // 列已存在，忽略
-            }
-
-            // 兼容旧库：添加 custom_settings 列
-            try {
-                stmt.execute("ALTER TABLE homeland ADD COLUMN custom_settings TEXT");
-            } catch (SQLException ignored) {
-                // 列已存在，忽略
-            }
+            addColumnIfMissing(conn, stmt, "homeland", "is_public",
+                    "BOOLEAN DEFAULT FALSE");
+            addColumnIfMissing(conn, stmt, "homeland", "visitor_flags", "TEXT");
+            addColumnIfMissing(conn, stmt, "homeland", "custom_settings", "TEXT");
 
             // 跨服消息表（仅 MySQL）
             if (isMySQL) {
@@ -236,11 +219,32 @@ public class DatabaseManager {
                         "    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
                         ")";
                 stmt.execute(statusTable);
-                try {
-                    stmt.execute("ALTER TABLE homeland_server_status ADD COLUMN loaded_worlds TEXT");
-                } catch (SQLException ignored) {}
+                addColumnIfMissing(conn, stmt, "homeland_server_status",
+                        "loaded_worlds", "TEXT");
             }
         }
+    }
+
+    private void addColumnIfMissing(Connection connection, Statement statement,
+                                    String table, String column, String definition)
+            throws SQLException {
+        if (columnExists(connection, table, column)) return;
+        statement.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+        plugin.getLogger().info("已添加 " + table + "." + column + " 列");
+    }
+
+    private boolean columnExists(Connection connection, String table, String column)
+            throws SQLException {
+        try (ResultSet columns = connection.getMetaData().getColumns(
+                connection.getCatalog(), null, null, null)) {
+            while (columns.next()) {
+                if (table.equalsIgnoreCase(columns.getString("TABLE_NAME"))
+                        && column.equalsIgnoreCase(columns.getString("COLUMN_NAME"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public Connection getConnection() throws SQLException {

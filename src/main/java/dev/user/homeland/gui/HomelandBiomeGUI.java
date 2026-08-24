@@ -154,42 +154,16 @@ public class HomelandBiomeGUI extends AbstractGUI {
         int points = entry.hasCostOverride() && entry.getCostOverridePoints() >= 0
                 ? entry.getCostOverridePoints() : config.getBiomeChangePoints();
 
-        // 扣费
-        if (!plugin.getHomelandManager().checkAndWithdrawEconomy(player, money, points)) {
-            pendingBiome = null;
-            refresh();
-            return;
-        }
-
-        // 设置群系
-        try {
-            org.bukkit.Chunk chunk = player.getLocation().getChunk();
-            int chunkX = chunk.getX();
-            int chunkZ = chunk.getZ();
-            int minY = world.getMinHeight();
-            int maxY = world.getMaxHeight();
-            Biome targetBiome = entry.getBiome();
-
-            for (int x = chunkX << 4; x < (chunkX << 4) + 16; x += 4) {
-                for (int z = chunkZ << 4; z < (chunkZ << 4) + 16; z += 4) {
-                    for (int y = minY; y < maxY; y += 4) {
-                        world.setBiome(x, y, z, targetBiome);
-                    }
-                }
-            }
-
-            world.refreshChunk(chunkX, chunkZ);
-
+        plugin.getHomelandManager().changeBiome(
+                player, homelandName, entry.getBiome(), money, points, () ->
+                        player.getScheduler().execute(plugin, () -> {
             MessageUtil.send(player, config.getMessage("gui.biome-success", "biome", entry.getName()));
             close();
-        } catch (Exception e) {
-            plugin.getLogger().warning("更改群系失败: " + e.getMessage());
-            // 退还费用
-            plugin.getHomelandManager().refundEconomy(player, money, points);
-            MessageUtil.send(player, config.getMessage("gui.biome-failed"));
-            pendingBiome = null;
-            refresh();
-        }
+                        }, () -> {}, 0L), () ->
+                        player.getScheduler().execute(plugin, () -> {
+                            pendingBiome = null;
+                            refresh();
+                        }, () -> {}, 0L));
     }
 
     private ItemStack createCurrentBiomeItem(Biome currentBiome) {

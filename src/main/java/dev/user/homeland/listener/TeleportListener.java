@@ -3,8 +3,6 @@ package dev.user.homeland.listener;
 import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.model.Homeland;
 import dev.user.homeland.util.MessageUtil;
-import net.thenextlvl.worlds.api.WorldsProvider;
-import net.thenextlvl.worlds.api.level.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.PortalType;
 import org.bukkit.World;
@@ -43,8 +41,23 @@ public class TeleportListener implements Listener {
 
         Player player = event.getPlayer();
 
-        if (!plugin.getHomelandManager().canEnterWorld(player, toWorld.getKey().getKey())
-                && !plugin.getHomelandManager().isApiBypass(player.getUniqueId())) {
+        String targetWorldKey = toWorld.getKey().getKey();
+        boolean homelandWorld = "simplehomeland".equals(toWorld.getKey().getNamespace());
+        if (homelandWorld && !plugin.getHomelandManager().isWorldAccessStateReady()) {
+            event.setCancelled(true);
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("world-access-denied"));
+            return;
+        }
+        if (homelandWorld && plugin.getHomelandManager()
+                .getHomelandByWorldKey(targetWorldKey) == null) {
+            event.setCancelled(true);
+            MessageUtil.send(player, plugin.getConfigManager().getMessage("world-access-denied"));
+            return;
+        }
+        boolean operationPending = plugin.getHomelandManager()
+                .isWorldOperationPending(targetWorldKey);
+        if (operationPending || (!plugin.getHomelandManager().canEnterWorld(player, targetWorldKey)
+                && !plugin.getHomelandManager().isApiBypass(player.getUniqueId()))) {
             event.setCancelled(true);
             MessageUtil.send(player, plugin.getConfigManager().getMessage("world-access-denied"));
         }
@@ -100,6 +113,7 @@ public class TeleportListener implements Listener {
 
         Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(fromWorld.getKey().getKey());
         if (homeland == null) return; // 非家园世界
+        if (plugin.getHomelandManager().isWorldOperationPending(homeland.getWorldKey())) return;
 
         PortalType portalType = event.getPortalType();
         boolean isNether = portalType == PortalType.NETHER;
@@ -126,51 +140,14 @@ public class TeleportListener implements Listener {
 
         MessageUtil.send(player, plugin.getConfigManager().getMessage("world-loading"));
 
-        WorldsProvider provider = plugin.getWorldsProvider();
-        if (provider == null) {
+        plugin.getHomelandManager().loadHomelandWorldByKey(targetWorldKey, world -> {
+            if (world == null) {
+                MessageUtil.send(player, plugin.getConfigManager().getMessage("world-not-loaded"));
+                portalLoading.remove(player.getUniqueId());
+                return;
+            }
+            // 下一 tick worlds 插件会发现目标世界已加载，正常处理传送。
             portalLoading.remove(player.getUniqueId());
-            return;
-        }
-
-        java.nio.file.Path worldPath = provider.levelView().getWorldContainer()
-                .resolve("homelands/" + targetWorldKey);
-
-        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
-            // 二次检查
-            if (plugin.getHomelandManager().getHomelandWorld(targetWorldKey) != null) {
-                portalLoading.remove(player.getUniqueId());
-                return;
-            }
-
-            var builderOpt = provider.levelView().read(worldPath);
-            if (builderOpt.isEmpty()) {
-                MessageUtil.send(player, plugin.getConfigManager().getMessage("world-not-loaded"));
-                portalLoading.remove(player.getUniqueId());
-                return;
-            }
-
-            Level level = builderOpt.get().build();
-            level.createAsync().thenAccept(world -> {
-                world.setAutoSave(true);
-                provider.levelView().setEnabled(world, true);
-
-                // 恢复 WorldBorder
-                Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
-                    int radius = homeland.getBorderRadius() * 2;
-                    world.getWorldBorder().setCenter(0, 0);
-                    world.getWorldBorder().setSize(radius);
-                });
-
-                // 加载完成，玩家仍在传送门中
-                // 下一 tick worlds 插件会发现目标世界已加载，正常处理传送
-                plugin.getHomelandManager().touchLastPlayerTime(homeland.getWorldKey());
-                portalLoading.remove(player.getUniqueId());
-            }).exceptionally(throwable -> {
-                plugin.getLogger().severe("加载家园维度失败: " + throwable.getMessage());
-                MessageUtil.send(player, plugin.getConfigManager().getMessage("world-not-loaded"));
-                portalLoading.remove(player.getUniqueId());
-                return null;
-            });
         });
     }
 

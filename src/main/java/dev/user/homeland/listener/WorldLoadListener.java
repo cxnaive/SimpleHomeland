@@ -1,6 +1,7 @@
 package dev.user.homeland.listener;
 
 import dev.user.homeland.SimpleHomelandPlugin;
+import dev.user.homeland.manager.HomelandWorldSettings;
 import dev.user.homeland.model.Homeland;
 import net.thenextlvl.worlds.api.WorldsProvider;
 import org.bukkit.Bukkit;
@@ -32,6 +33,7 @@ public class WorldLoadListener implements Listener {
 
         Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(worldKey);
         if (homeland == null) return;
+        if (plugin.getHomelandManager().isWorldOperationPending(worldKey)) return;
 
         // 开启自动保存
         world.setAutoSave(true);
@@ -69,11 +71,14 @@ public class WorldLoadListener implements Listener {
                     if (provider != null) {
                         provider.linkProvider().link(overworld, world);
                     }
-                    plugin.getHomelandManager().copyGamerules(overworld, world);
-                    plugin.getHomelandManager().copyDifficulty(overworld, world);
+                    HomelandWorldSettings.copyGamerules(
+                            overworld, world, plugin.getConfigManager());
+                    HomelandWorldSettings.copyDifficulty(overworld, world);
                 } else {
-                    plugin.getHomelandManager().applyDefaultGamerules(world);
-                    plugin.getHomelandManager().applyDefaultDifficulty(world);
+                    HomelandWorldSettings.applyDefaultGamerules(
+                            world, plugin.getConfigManager());
+                    HomelandWorldSettings.applyDefaultDifficulty(
+                            world, plugin.getConfigManager());
                 }
             });
         }

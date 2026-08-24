@@ -12,32 +12,53 @@ public class Homeland {
     private final String worldKey;
     private volatile UUID worldUuid;
     private volatile String worldType;
+    private final AtomicBoolean overworldResetPending;
+    private volatile UUID overworldResetPreviousUuid;
     private final AtomicInteger borderRadius;
     private final AtomicBoolean hasNether;
     private final AtomicBoolean hasEnd;
     private final AtomicBoolean isPublic;
-    private VisitorFlags visitorFlags;
+    private volatile VisitorFlags visitorFlags;
     private volatile CustomSettings customSettings;
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
-        this(id, ownerUuid, name, worldKey, null, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings());
+        this(id, ownerUuid, name, worldKey, null, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings(), false, null);
     }
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
-        this(id, ownerUuid, name, worldKey, worldUuid, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings());
+        this(id, ownerUuid, name, worldKey, worldUuid, "default", borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings(), false, null);
     }
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, String worldType, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags) {
-        this(id, ownerUuid, name, worldKey, worldUuid, worldType, borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings());
+        this(id, ownerUuid, name, worldKey, worldUuid, worldType, borderRadius, hasNether, hasEnd, isPublic, visitorFlags, new CustomSettings(), false, null);
     }
 
     public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid, String worldType, int borderRadius, boolean hasNether, boolean hasEnd, boolean isPublic, VisitorFlags visitorFlags, CustomSettings customSettings) {
+        this(id, ownerUuid, name, worldKey, worldUuid, worldType, borderRadius,
+                hasNether, hasEnd, isPublic, visitorFlags, customSettings, false);
+    }
+
+    public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid,
+                    String worldType, int borderRadius, boolean hasNether, boolean hasEnd,
+                    boolean isPublic, VisitorFlags visitorFlags, CustomSettings customSettings,
+                    boolean overworldResetPending) {
+        this(id, ownerUuid, name, worldKey, worldUuid, worldType, borderRadius,
+                hasNether, hasEnd, isPublic, visitorFlags, customSettings,
+                overworldResetPending, null);
+    }
+
+    public Homeland(int id, UUID ownerUuid, String name, String worldKey, UUID worldUuid,
+                    String worldType, int borderRadius, boolean hasNether, boolean hasEnd,
+                    boolean isPublic, VisitorFlags visitorFlags, CustomSettings customSettings,
+                    boolean overworldResetPending, UUID overworldResetPreviousUuid) {
         this.id = id;
         this.ownerUuid = ownerUuid;
         this.name = name;
         this.worldKey = worldKey;
         this.worldUuid = worldUuid;
         this.worldType = worldType != null ? worldType : "default";
+        this.overworldResetPending = new AtomicBoolean(overworldResetPending);
+        this.overworldResetPreviousUuid = overworldResetPreviousUuid;
         this.borderRadius = new AtomicInteger(borderRadius);
         this.hasNether = new AtomicBoolean(hasNether);
         this.hasEnd = new AtomicBoolean(hasEnd);
@@ -54,6 +75,10 @@ public class Homeland {
     public void setWorldUuid(UUID worldUuid) { this.worldUuid = worldUuid; }
     public String getWorldType() { return worldType; }
     public void setWorldType(String worldType) { this.worldType = worldType != null ? worldType : "default"; }
+    public boolean isOverworldResetPending() { return overworldResetPending.get(); }
+    public void setOverworldResetPending(boolean pending) { overworldResetPending.set(pending); }
+    public UUID getOverworldResetPreviousUuid() { return overworldResetPreviousUuid; }
+    public void setOverworldResetPreviousUuid(UUID worldUuid) { this.overworldResetPreviousUuid = worldUuid; }
     public int getBorderRadius() { return borderRadius.get(); }
     public boolean hasNether() { return hasNether.get(); }
     public boolean hasEnd() { return hasEnd.get(); }

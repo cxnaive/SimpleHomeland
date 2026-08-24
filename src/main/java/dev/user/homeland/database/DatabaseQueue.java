@@ -71,12 +71,22 @@ public class DatabaseQueue {
             if (task.getErrorCallback() != null) {
                 task.getErrorCallback().accept(e);
             }
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Unexpected database operation failure [" + task.getName() + "]", e);
+            if (task.getErrorCallback() != null) {
+                task.getErrorCallback().accept(new SQLException(
+                        "Unexpected database operation failure: " + task.getName(), e));
+            }
         }
     }
 
     public <T> void submit(String name, DatabaseOperation<T> operation, Consumer<T> callback, Consumer<SQLException> errorCallback) {
         if (!running) {
             plugin.getLogger().warning("Database queue is closed, cannot submit task: " + name);
+            if (errorCallback != null) {
+                errorCallback.accept(new SQLException("Database queue is closed, task rejected: " + name));
+            }
             return;
         }
 
@@ -102,6 +112,12 @@ public class DatabaseQueue {
         submit(name, operation, null, null);
     }
 
+    public <T> CompletableFuture<T> submitFuture(String name, DatabaseOperation<T> operation) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        submit(name, operation, future::complete, future::completeExceptionally);
+        return future;
+    }
+
     public void shutdown() {
         running = false;
         executor.shutdown();
@@ -110,6 +126,7 @@ public class DatabaseQueue {
                 executor.shutdownNow();
             }
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             executor.shutdownNow();
         }
     }

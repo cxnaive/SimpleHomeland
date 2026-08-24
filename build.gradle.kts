@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "dev.user"
-version = "1.8.1"
+version = "1.9.0"
 
 repositories {
     mavenCentral()
@@ -47,12 +47,21 @@ dependencies {
     // CraftEngine 家具/自定义方块保护 (软依赖, antigrieflib 已内嵌于 CE jar)
     compileOnly("net.momirealms:craft-engine-core:26.7.4")
     compileOnly("net.momirealms:craft-engine-bukkit:26.7.4")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testRuntimeOnly("dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT")
+    testRuntimeOnly("com.h2database:h2:2.3.232")
+    testRuntimeOnly("com.google.code.gson:gson:2.12.1")
 }
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     sourceCompatibility = "21"
     targetCompatibility = "21"
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.shadowJar {

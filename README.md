@@ -234,7 +234,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.cxnaive:SimpleHomeland:v1.8.1")
+    compileOnly("com.github.cxnaive:SimpleHomeland:v1.9.0")
 }
 ```
 
@@ -249,7 +249,7 @@ dependencies {
 <dependency>
     <groupId>com.github.cxnaive</groupId>
     <artifactId>SimpleHomeland</artifactId>
-    <version>v1.8.1</version>
+    <version>v1.9.0</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -302,7 +302,7 @@ SimpleHomelandAPI.teleportToHomelandByWorldUUID(player, worldUUID, false, result
 ./gradlew shadowJar
 ```
 
-输出：`build/libs/SimpleHomeland-1.8.1.jar`
+输出：`build/libs/SimpleHomeland-1.9.0.jar`
 
 ## 许可
 

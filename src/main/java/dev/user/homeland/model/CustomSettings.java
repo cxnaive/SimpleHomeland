@@ -1,8 +1,12 @@
 package dev.user.homeland.model;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Collections;
 
 /**
  * 自定义家园设置，存储为 JSON 字符串到数据库。
@@ -11,7 +15,8 @@ import java.util.Collections;
 public class CustomSettings {
 
     private volatile Map<String, Boolean> settings;
-    private long version;
+    private final Map<String, Long> keyVersions = new LinkedHashMap<>();
+    private long nextVersion;
 
     public record Update(String key, Boolean previousValue, long version) {}
 
@@ -27,22 +32,25 @@ public class CustomSettings {
         if (json == null || json.isBlank()) return result;
 
         try {
-            String content = json.trim();
-            if (content.startsWith("{")) content = content.substring(1);
-            if (content.endsWith("}")) content = content.substring(0, content.length() - 1);
-
-            String[] pairs = content.split(",");
-            for (String pair : pairs) {
-                String[] kv = pair.split(":", 2);
-                if (kv.length != 2) continue;
-                String key = kv[0].trim().replace("\"", "");
-                boolean value = Boolean.parseBoolean(kv[1].trim());
-                result.set(key, value);
+            JsonObject object = JsonParser.parseString(json).getAsJsonObject();
+            Map<String, Boolean> parsed = new LinkedHashMap<>();
+            for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
+                JsonElement value = entry.getValue();
+                if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean()) {
+                    parsed.put(entry.getKey(), value.getAsBoolean());
+                }
             }
-        } catch (Exception e) {
+            result.settings = Collections.unmodifiableMap(parsed);
+        } catch (RuntimeException ignored) {
             // 解析失败，使用空设置
         }
         return result;
+    }
+
+    public static String updateJson(String json, String key, boolean value) {
+        CustomSettings settings = fromJson(json);
+        settings.set(key, value);
+        return settings.toJson();
     }
 
     /**
@@ -50,16 +58,11 @@ public class CustomSettings {
      */
     public String toJson() {
         Map<String, Boolean> snapshot = settings;
-        if (snapshot.isEmpty()) return "{}";
-        StringBuilder sb = new StringBuilder("{");
-        boolean first = true;
+        JsonObject object = new JsonObject();
         for (Map.Entry<String, Boolean> entry : snapshot.entrySet()) {
-            if (!first) sb.append(",");
-            sb.append("\"").append(entry.getKey()).append("\":").append(entry.getValue());
-            first = false;
+            object.addProperty(entry.getKey(), entry.getValue());
         }
-        sb.append("}");
-        return sb.toString();
+        return object.toString();
     }
 
     /**
@@ -81,12 +84,13 @@ public class CustomSettings {
         Map<String, Boolean> updated = new LinkedHashMap<>(settings);
         updated.put(key, value);
         settings = Collections.unmodifiableMap(updated);
-        version++;
+        long version = ++nextVersion;
+        keyVersions.put(key, version);
         return new Update(key, previousValue, version);
     }
 
     public synchronized boolean rollback(Update update) {
-        if (version != update.version()) return false;
+        if (!Long.valueOf(update.version()).equals(keyVersions.get(update.key()))) return false;
 
         Map<String, Boolean> restored = new LinkedHashMap<>(settings);
         if (update.previousValue() == null) {
@@ -95,7 +99,7 @@ public class CustomSettings {
             restored.put(update.key(), update.previousValue());
         }
         settings = Collections.unmodifiableMap(restored);
-        version++;
+        keyVersions.put(update.key(), ++nextVersion);
         return true;
     }
 }
