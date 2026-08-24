@@ -317,7 +317,7 @@ final class HomelandWorldOperations {
                     homeland.setOverworldResetPreviousUuid(previousWorldUuid);
                     store.updateWorldUuid(homeland, null);
                     return reportFailure(performOverworldReset(
-                                    target, homeland, worldTypeKey), target, ChargedCost.none(),
+                                    target, homeland, worldTypeKey), target, cost,
                             config.getMessage("reset-pending-recovery"), "重置主世界失败");
                 });
     }
@@ -674,7 +674,8 @@ final class HomelandWorldOperations {
                 loaded.add(world);
             } else {
                 Path path = provider.levelView().getWorldContainer().resolve("homelands/" + key);
-                if (Files.exists(path)) unloaded.add(path);
+                // 不在 global region 线程执行磁盘 stat；删除阶段在异步线程复查路径。
+                unloaded.add(path);
             }
         }
         return new HomelandDeletionPlan(provider, getWorld(task.worldKey()),
@@ -704,7 +705,7 @@ final class HomelandWorldOperations {
             for (Path path : plan.unloadedPaths()) {
                 cleanup.add(CompletableFuture.runAsync(() -> {
                     try {
-                        deleteRecursively(path);
+                        if (Files.exists(path)) deleteRecursively(path);
                     } catch (IOException error) {
                         throw new CompletionException(error);
                     }
@@ -723,7 +724,9 @@ final class HomelandWorldOperations {
                 return reject(target, plugin.getConfigManager().getMessage("world-not-loaded"));
             }
             return dimensionBuilder(provider, homeland, dimension).build().createAsync()
-                    .thenApply(world -> new DimensionWorldContext(provider, overworld, world));
+                    .thenApply(world -> new DimensionWorldContext(provider, overworld, world,
+                            provider.levelView().getWorldContainer().resolve(
+                                    "homelands/" + dimension.worldKey(homeland))));
         });
         return creation.thenCompose(context -> onGlobalRegionThread(() -> {
                     initializeDimensionWorld(context, homeland);
@@ -735,32 +738,42 @@ final class HomelandWorldOperations {
 
     private CompletionStage<DimensionWorldContext> loadDimensionForDeletion(
             Homeland homeland, HomelandDimension dimension) {
-        return loadDimension(homeland, dimension, false);
+        return onGlobalRegionThread(() -> {
+            WorldsProvider provider = requireProvider();
+            World overworld = getWorld(homeland.getWorldKey());
+            String worldKey = dimension.worldKey(homeland);
+            Path path = provider.levelView().getWorldContainer()
+                    .resolve("homelands/" + worldKey);
+            World world = getWorld(worldKey);
+            if (world != null) {
+                return new DimensionWorldContext(provider, overworld, world, path);
+            }
+            // 未加载世界没有玩家需要疏散，直接在删除阶段异步清理目录，
+            // 避免为了删除损坏的 level.dat 再次加载世界。
+            return new DimensionWorldContext(provider, overworld, null, path);
+        });
     }
 
     private CompletionStage<DimensionWorldContext> loadDimensionForReset(
             Homeland homeland, HomelandDimension dimension) {
-        return loadDimension(homeland, dimension, true);
+        return loadDimension(homeland, dimension);
     }
 
     private CompletionStage<DimensionWorldContext> loadDimension(
-            Homeland homeland, HomelandDimension dimension, boolean createIfMissing) {
+            Homeland homeland, HomelandDimension dimension) {
         return onGlobalRegionThreadAsync(() -> {
             WorldsProvider provider = requireProvider();
             World overworld = getWorld(homeland.getWorldKey());
+            Path path = provider.levelView().getWorldContainer().resolve(
+                    "homelands/" + dimension.worldKey(homeland));
             World world = getWorld(dimension.worldKey(homeland));
             if (world != null) {
                 return CompletableFuture.completedFuture(
-                        new DimensionWorldContext(provider, overworld, world));
-            }
-            Path path = provider.levelView().getWorldContainer().resolve(
-                    "homelands/" + dimension.worldKey(homeland));
-            if (!createIfMissing && !Files.exists(path)) {
-                return CompletableFuture.completedFuture(
-                        new DimensionWorldContext(provider, overworld, null));
+                        new DimensionWorldContext(provider, overworld, world, path));
             }
             return dimensionBuilder(provider, homeland, dimension).build().createAsync()
-                    .thenApply(loaded -> new DimensionWorldContext(provider, overworld, loaded));
+                    .thenApply(loaded -> new DimensionWorldContext(
+                            provider, overworld, loaded, path));
         });
     }
 
@@ -834,7 +847,16 @@ final class HomelandWorldOperations {
     }
 
     private CompletionStage<Void> deleteDimensionWorld(DimensionWorldContext context) {
-        if (context.world() == null) return CompletableFuture.completedFuture(null);
+        if (context.world() == null) {
+            if (context.path() == null) return CompletableFuture.completedFuture(null);
+            return CompletableFuture.runAsync(() -> {
+                try {
+                    if (Files.exists(context.path())) deleteRecursively(context.path());
+                } catch (IOException error) {
+                    throw new CompletionException(error);
+                }
+            });
+        }
         return onGlobalRegionThreadAsync(() -> {
             if (context.overworld() != null) {
                 context.provider().linkProvider().unlink(context.overworld(), context.world());
@@ -887,8 +909,16 @@ final class HomelandWorldOperations {
                         originalError.addSuppressed(cause);
                         plugin.getLogger().log(java.util.logging.Level.SEVERE,
                                 "恢复维度世界失败，维度将保持锁定", cause);
-                        store.refreshIndexes(homeland);
-                        return CompletableFuture.failedFuture(originalError);
+                        return disableDimensionWorld(context)
+                                .handle((ignoredDisabled, disableError) -> {
+                                    if (disableError != null) {
+                                        originalError.addSuppressed(unwrap(disableError));
+                                    }
+                                    store.refreshIndexes(homeland);
+                                    return (Void) null;
+                                })
+                                .thenCompose(ignoredDisabled ->
+                                        CompletableFuture.failedFuture(originalError));
                     }
                     return updateDimensionState(
                                     homeland, dimension, true, "restore-dimension-state")
@@ -896,17 +926,37 @@ final class HomelandWorldOperations {
                             .thenCompose(databaseError -> {
                                 if (databaseError == null) {
                                     dimension.setUnlocked(homeland, true);
+                                    store.refreshIndexes(homeland);
+                                    return CompletableFuture.failedFuture(originalError);
                                 } else {
                                     dimension.setUnlocked(homeland, false);
                                     Throwable cause = unwrap(databaseError);
                                     originalError.addSuppressed(cause);
                                     plugin.getLogger().log(java.util.logging.Level.SEVERE,
                                             "回补维度数据库状态失败，维度将保持锁定", cause);
+                                    return disableDimensionWorld(context)
+                                            .handle((ignoredDisabled, disableError) -> {
+                                                if (disableError != null) {
+                                                    originalError.addSuppressed(unwrap(disableError));
+                                                }
+                                                store.refreshIndexes(homeland);
+                                                return (Void) null;
+                                            })
+                                            .thenCompose(ignoredDisabled ->
+                                                    CompletableFuture.failedFuture(originalError));
                                 }
-                                store.refreshIndexes(homeland);
-                                return CompletableFuture.failedFuture(originalError);
                             });
                 });
+    }
+
+    private CompletionStage<Void> disableDimensionWorld(DimensionWorldContext context) {
+        if (context.world() == null) return CompletableFuture.completedFuture(null);
+        return onGlobalRegionThread(() -> {
+            if (context.overworld() != null) {
+                context.provider().linkProvider().unlink(context.overworld(), context.world());
+            }
+            context.provider().levelView().setEnabled(context.world(), false);
+        });
     }
 
     private CompletionStage<Void> unloadOverworld(OverworldResetContext context) {
@@ -956,7 +1006,7 @@ final class HomelandWorldOperations {
                     .ignoreLevelData(true)
                     .seed(new java.util.Random().nextLong());
 
-            if ("default".equals(worldTypeKey)) {
+            if (!"void".equals(worldTypeKey) && !"flat".equals(worldTypeKey)) {
                 ConfigManager config = plugin.getConfigManager();
                 builder.structures(config.isWorldStructures())
                         .bonusChest(config.isWorldBonusChest());
@@ -1029,12 +1079,14 @@ final class HomelandWorldOperations {
                     World regenerated = getWorld(dimension.worldKey(homeland));
                     if (regenerated != null) {
                         return CompletableFuture.completedFuture(new DimensionWorldContext(
-                                context.provider(), context.overworld(), regenerated));
+                                context.provider(), context.overworld(), regenerated,
+                                context.path()));
                     }
                     return dimensionBuilder(context.provider(), homeland, dimension)
                             .build().createAsync()
                             .thenApply(world -> new DimensionWorldContext(
-                                    context.provider(), context.overworld(), world));
+                                    context.provider(), context.overworld(), world,
+                                    context.path()));
                 }));
     }
 
@@ -1248,7 +1300,8 @@ final class HomelandWorldOperations {
     private record WorldCleanupTask(String worldKey) {
     }
 
-    private record DimensionWorldContext(WorldsProvider provider, World overworld, World world) {
+    private record DimensionWorldContext(WorldsProvider provider, World overworld,
+                                         World world, Path path) {
     }
 
     private record OverworldResetContext(

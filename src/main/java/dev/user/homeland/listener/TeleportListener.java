@@ -148,6 +148,11 @@ public class TeleportListener implements Listener {
             }
             // 下一 tick worlds 插件会发现目标世界已加载，正常处理传送。
             portalLoading.remove(player.getUniqueId());
+        }, error -> {
+            portalLoading.remove(player.getUniqueId());
+            MessageUtil.send(player, plugin.getConfigManager().getMessage(
+                    error instanceof dev.user.homeland.manager.HomelandOperationCoordinator.BusyException
+                            ? "homeland-operation-busy" : "world-not-loaded"));
         });
     }
 

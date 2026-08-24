@@ -1,6 +1,8 @@
 package dev.user.homeland.manager;
 
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,14 +45,38 @@ public final class HomelandOperationCoordinator {
 
     private record ActiveOperation(OperationType type, Object token) {}
 
-    private final Map<Integer, ActiveOperation> active = new ConcurrentHashMap<>();
+    private static final class Activity {
+        private ActiveOperation exclusive;
+        private final Set<ActiveOperation> loads = new HashSet<>();
 
-    public <T> CompletionStage<T> execute(int homelandId, OperationType type,
-                                          Supplier<? extends CompletionStage<T>> operation) {
+        private OperationType activeType() {
+            return exclusive != null ? exclusive.type()
+                    : OperationType.LOAD_WORLD;
+        }
+
+        private boolean isEmpty() {
+            return exclusive == null && loads.isEmpty();
+        }
+    }
+
+    private final Map<Integer, Activity> active = new ConcurrentHashMap<>();
+
+    public synchronized <T> CompletionStage<T> execute(int homelandId, OperationType type,
+                                                        Supplier<? extends CompletionStage<T>> operation) {
         ActiveOperation token = new ActiveOperation(type, new Object());
-        ActiveOperation current = active.putIfAbsent(homelandId, token);
-        if (current != null) {
-            return CompletableFuture.failedFuture(new BusyException(current.type()));
+        Activity activity = active.computeIfAbsent(homelandId, ignored -> new Activity());
+        if (type == OperationType.LOAD_WORLD) {
+            if (activity.exclusive != null) {
+                return CompletableFuture.failedFuture(new BusyException(
+                        activity.exclusive.type()));
+            }
+            activity.loads.add(token);
+        } else {
+            if (activity.exclusive != null || !activity.loads.isEmpty()) {
+                return CompletableFuture.failedFuture(new BusyException(
+                        activity.activeType()));
+            }
+            activity.exclusive = token;
         }
 
         CompletionStage<T> stage;
@@ -61,23 +87,36 @@ public final class HomelandOperationCoordinator {
                         new IllegalStateException("Homeland operation returned null stage: " + type));
             }
         } catch (Throwable error) {
-            active.remove(homelandId, token);
+            release(homelandId, token);
             return CompletableFuture.failedFuture(error);
         }
 
-        return stage.whenComplete((result, error) -> active.remove(homelandId, token));
+        return stage.whenComplete((result, error) -> release(homelandId, token));
     }
 
-    public boolean isBusy(int homelandId) {
-        return active.containsKey(homelandId);
+    private synchronized void release(int homelandId, ActiveOperation token) {
+        Activity activity = active.get(homelandId);
+        if (activity == null) return;
+        if (activity.exclusive == token) {
+            activity.exclusive = null;
+        } else {
+            activity.loads.remove(token);
+        }
+        if (activity.isEmpty()) active.remove(homelandId, activity);
     }
 
-    public boolean isDestructiveOperationActive(int homelandId) {
-        ActiveOperation operation = active.get(homelandId);
-        return operation != null && operation.type().isDestructive();
+    public synchronized boolean isBusy(int homelandId) {
+        Activity activity = active.get(homelandId);
+        return activity != null && !activity.isEmpty();
     }
 
-    public void clear() {
+    public synchronized boolean isDestructiveOperationActive(int homelandId) {
+        Activity activity = active.get(homelandId);
+        return activity != null && activity.exclusive != null
+                && activity.exclusive.type().isDestructive();
+    }
+
+    public synchronized void clear() {
         active.clear();
     }
 }

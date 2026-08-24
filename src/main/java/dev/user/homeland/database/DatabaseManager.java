@@ -10,6 +10,10 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 public class DatabaseManager {
 
@@ -112,7 +116,18 @@ public class DatabaseManager {
                 stmt.execute("ALTER TABLE homeland ADD CONSTRAINT homeland_name_unique UNIQUE (name)");
                 plugin.getLogger().info("已添加 name 全局唯一约束");
             } catch (SQLException e) {
-                // 约束已存在，忽略
+                try {
+                    if (hasSingleColumnUniqueIndex(conn, "homeland", "name")) {
+                        plugin.getLogger().fine("name 全局唯一约束已存在，跳过迁移");
+                    } else {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "无法添加 name 全局唯一约束；请检查现有重复名称或数据库权限。", e);
+                    }
+                } catch (SQLException metadataError) {
+                    e.addSuppressed(metadataError);
+                    plugin.getLogger().log(java.util.logging.Level.WARNING,
+                            "无法确认 name 全局唯一约束状态，继续使用应用层名称检查。", e);
+                }
             }
 
             addColumnIfMissing(conn, stmt, "homeland", "world_uuid", "VARCHAR(36)");
@@ -229,7 +244,18 @@ public class DatabaseManager {
                                     String table, String column, String definition)
             throws SQLException {
         if (columnExists(connection, table, column)) return;
-        statement.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+        try {
+            statement.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+        } catch (SQLException error) {
+            // 两台主服可能同时迁移同一列。成功执行 ALTER 的另一台会让本次
+            // 抛出 duplicate-column；复查元数据后仅在列确实存在时吞掉该竞态。
+            try {
+                if (columnExists(connection, table, column)) return;
+            } catch (SQLException metadataError) {
+                error.addSuppressed(metadataError);
+            }
+            throw error;
+        }
         plugin.getLogger().info("已添加 " + table + "." + column + " 列");
     }
 
@@ -245,6 +271,24 @@ public class DatabaseManager {
             }
         }
         return false;
+    }
+
+    private boolean hasSingleColumnUniqueIndex(Connection connection, String table,
+                                               String column) throws SQLException {
+        Map<String, Set<String>> indexColumns = new HashMap<>();
+        try (ResultSet indexes = connection.getMetaData().getIndexInfo(
+                connection.getCatalog(), null, table, true, false)) {
+            while (indexes.next()) {
+                if (indexes.getBoolean("NON_UNIQUE")) continue;
+                String indexName = indexes.getString("INDEX_NAME");
+                String indexColumn = indexes.getString("COLUMN_NAME");
+                if (indexName == null || indexColumn == null) continue;
+                indexColumns.computeIfAbsent(indexName, ignored -> new HashSet<>())
+                        .add(indexColumn);
+            }
+        }
+        return indexColumns.values().stream().anyMatch(columns -> columns.size() == 1
+                && columns.stream().anyMatch(column::equalsIgnoreCase));
     }
 
     public Connection getConnection() throws SQLException {

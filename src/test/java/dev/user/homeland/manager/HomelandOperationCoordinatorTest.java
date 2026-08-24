@@ -81,6 +81,9 @@ class HomelandOperationCoordinatorTest {
         CompletableFuture<Void> load = new CompletableFuture<>();
         coordinator.execute(15, HomelandOperationCoordinator.OperationType.LOAD_WORLD,
                 () -> load);
+        CompletableFuture<Void> secondLoad = new CompletableFuture<>();
+        coordinator.execute(15, HomelandOperationCoordinator.OperationType.LOAD_WORLD,
+                () -> secondLoad);
         assertFalse(coordinator.isDestructiveOperationActive(15));
         CompletionException loadBusy = assertThrows(CompletionException.class, () ->
                 coordinator.execute(15,
@@ -91,6 +94,7 @@ class HomelandOperationCoordinatorTest {
                 assertInstanceOf(HomelandOperationCoordinator.BusyException.class,
                         loadBusy.getCause()).getActiveOperation());
         load.complete(null);
+        secondLoad.complete(null);
 
         CompletableFuture<Void> reset = new CompletableFuture<>();
         coordinator.execute(15, HomelandOperationCoordinator.OperationType.RESET_OVERWORLD,
@@ -98,5 +102,23 @@ class HomelandOperationCoordinatorTest {
         assertTrue(coordinator.isDestructiveOperationActive(15));
         reset.complete(null);
         assertFalse(coordinator.isDestructiveOperationActive(15));
+    }
+
+    @Test
+    void differentHomelandsCanRunOperationsInParallel() {
+        CompletableFuture<Void> first = new CompletableFuture<>();
+        CompletableFuture<Void> second = new CompletableFuture<>();
+
+        coordinator.execute(21, HomelandOperationCoordinator.OperationType.LOAD_WORLD,
+                () -> first);
+        coordinator.execute(22, HomelandOperationCoordinator.OperationType.LOAD_WORLD,
+                () -> second);
+
+        assertTrue(coordinator.isBusy(21));
+        assertTrue(coordinator.isBusy(22));
+        first.complete(null);
+        second.complete(null);
+        assertFalse(coordinator.isBusy(21));
+        assertFalse(coordinator.isBusy(22));
     }
 }

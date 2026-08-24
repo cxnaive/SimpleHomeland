@@ -33,7 +33,13 @@ public class CustomSettingListener implements Listener {
         Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(worldKey);
         if (homeland == null) return; // 非家园世界
 
-        boolean prevent = homeland.getCustomSettings().get("PREVENT_ICE_SNOW_MELTING", false);
+        String key = "PREVENT_ICE_SNOW_MELTING";
+        boolean defaultValue = plugin.getConfigManager().getAllGameruleConfigs().stream()
+                .filter(rule -> key.equals(rule.getKey()))
+                .findFirst()
+                .map(rule -> Boolean.parseBoolean(rule.getDefaultValue()))
+                .orElse(false);
+        boolean prevent = homeland.getCustomSettings().get(key, defaultValue);
         if (prevent) {
             event.setCancelled(true);
         }

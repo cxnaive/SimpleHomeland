@@ -4,6 +4,7 @@ import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.model.Homeland;
 import dev.user.homeland.util.MessageUtil;
 import org.bukkit.Bukkit;
+import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -68,10 +69,17 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
         long now = System.currentTimeMillis();
         pendingDestructiveCommands.entrySet().removeIf(entry -> entry.getValue().expiresAt() < now);
 
-        String senderKey = sender instanceof Player player
-                ? player.getUniqueId().toString()
-                : "NON_PLAYER:" + sender.getClass().getName() + ":" + sender.getName() + ":"
-                        + Integer.toHexString(System.identityHashCode(sender));
+        String senderKey;
+        if (sender instanceof Player player) {
+            senderKey = "PLAYER:" + player.getUniqueId();
+        } else if (sender instanceof BlockCommandSender blockSender) {
+            var block = blockSender.getBlock();
+            senderKey = "BLOCK:" + block.getWorld().getUID() + ":"
+                    + block.getX() + ":" + block.getY() + ":" + block.getZ();
+        } else {
+            // Console/RCON sender 对象可能每次执行都重新包装，不能使用 identityHashCode。
+            senderKey = "NON_PLAYER:" + sender.getClass().getName() + ":" + sender.getName();
+        }
         PendingDestructiveCommand pending = pendingDestructiveCommands.get(senderKey);
         if (pending != null && pending.actionKey().equals(actionKey) && pending.expiresAt() >= now
                 && pendingDestructiveCommands.remove(senderKey, pending)) {
