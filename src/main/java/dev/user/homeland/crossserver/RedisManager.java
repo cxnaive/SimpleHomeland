@@ -90,7 +90,8 @@ public class RedisManager {
         JsonArray worldsArray = new JsonArray();
         for (var world : Bukkit.getWorlds()) {
             var nk = world.getKey();
-            if ("homelands".equals(nk.getNamespace())) {
+            if ("homelands".equals(nk.getNamespace())
+                    && plugin.getHomelandManager().isHomelandWorldLoaded(nk.getKey())) {
                 worldsArray.add(nk.getKey());
             }
         }

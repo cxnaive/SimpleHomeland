@@ -9,6 +9,8 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.UUID;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.function.BooleanSupplier;
 
 /** Prepares nested Worlds 3 folders for Paper's official legacyName migration. */
@@ -38,6 +40,16 @@ final class HomelandWorldMigration {
         Path pending = journal.resolve(key + ".pending");
         // Missing/invalid data must be attempted and reported as a failure, not silently skipped.
         return Files.exists(pending) || !Files.isDirectory(target(key));
+    }
+
+    Set<String> pendingKeys() throws IOException {
+        if (!Files.exists(journal)) return Set.of();
+        try (var files = Files.list(journal)) {
+            return files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.matches("[a-z0-9_-]+\\.pending"))
+                    .map(name -> name.substring(0, name.length() - ".pending".length()))
+                    .collect(Collectors.toUnmodifiableSet());
+        }
     }
 
     UUID legacyUuid(String key) throws IOException {

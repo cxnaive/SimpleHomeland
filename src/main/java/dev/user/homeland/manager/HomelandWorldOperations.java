@@ -318,10 +318,14 @@ final class HomelandWorldOperations {
     }
 
     CompletionStage<Void> resumeOverworldReset(Homeland homeland) {
-        CompletionStage<Void> recovery = loadOverworldForRecovery(homeland)
+        // prepare clears world_uuid; only a generated, saved replacement writes it.
+        // Loading damaged old metadata can invent a UUID without clearing its chunks.
+        java.util.UUID generated = homeland.getWorldUuid();
+        CompletionStage<Void> recovery = generated == null
+                ? performOverworldReset(null, homeland, homeland.getWorldType())
+                : loadOverworldForRecovery(homeland)
                 .thenCompose(world -> {
-                    java.util.UUID previous = homeland.getOverworldResetPreviousUuid();
-                    if (world == null || previous == null || previous.equals(world.getUID())) {
+                    if (world == null || !generated.equals(world.getUID())) {
                         return performOverworldReset(null, homeland, homeland.getWorldType());
                     }
                     return finishExistingOverworldReset(homeland, world);
@@ -350,6 +354,8 @@ final class HomelandWorldOperations {
                 .thenCompose(configured -> configureOverworld(
                                 configured, homeland, homeland.getWorldType())
                         .thenApply(ignored -> configured.creation().world()))
+                .thenCompose(replacement -> persistGeneratedOverworld(homeland, replacement)
+                        .thenApply(ignored -> replacement))
                 .thenCompose(worldResult -> finishOverworldReset(
                         null, homeland, homeland.getWorldType(), worldResult));
     }
@@ -379,15 +385,27 @@ final class HomelandWorldOperations {
                         .thenApply(spawnY -> new ConfiguredOverworld(creation, spawnY)))
                 .thenCompose(configured -> configureOverworld(configured, homeland, worldTypeKey)
                         .thenApply(ignored -> configured.creation().world()))
+                .thenCompose(world -> persistGeneratedOverworld(homeland, world)
+                        .thenApply(ignored -> world))
                 .thenCompose(world -> finishOverworldReset(
                         target, homeland, worldTypeKey, world));
         return workflow;
     }
 
+    private CompletionStage<Void> persistGeneratedOverworld(Homeland homeland, World world) {
+        return requireProvider().save(world, true).thenCompose(saved -> {
+            if (!saved) return CompletableFuture.failedFuture(
+                    new IOException("Could not save replacement overworld: " + world.key()));
+            return retryDatabase(() -> plugin.getDatabaseQueue().submitFuture(
+                    "record-generated-overworld", connection -> {
+                        recordGeneratedOverworldResetRecord(connection, homeland.getId(), world.getUID());
+                        return null;
+                    }), 3).thenRun(() -> store.updateWorldUuid(homeland, world.getUID()));
+        });
+    }
+
     private CompletionStage<Void> finishOverworldReset(
             CommandSender target, Homeland homeland, String worldTypeKey, World world) {
-        store.updateWorldUuid(homeland, world.getUID());
-        homeland.setWorldType(worldTypeKey);
         return retryDatabase(() -> plugin.getDatabaseQueue().submitFuture(
                             "finish-reset-overworld", conn -> {
                                 finishOverworldResetRecord(conn, homeland.getId(),
@@ -395,6 +413,8 @@ final class HomelandWorldOperations {
                                 return null;
                             }), 3)
                 .thenRun(() -> {
+                    store.updateWorldUuid(homeland, world.getUID());
+                    homeland.setWorldType(worldTypeKey);
                     homeland.setOverworldResetPending(false);
                     homeland.setOverworldResetPreviousUuid(null);
                     if (target != null) {
@@ -418,6 +438,18 @@ final class HomelandWorldOperations {
             statement.setInt(3, homelandId);
             if (statement.executeUpdate() != 1) {
                 throw new SQLException("Homeland row not found: " + homelandId);
+            }
+        }
+    }
+
+    static void recordGeneratedOverworldResetRecord(java.sql.Connection connection, int homelandId,
+                                                    java.util.UUID worldUuid) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE homeland SET world_uuid = ? WHERE id = ? AND overworld_reset_pending = TRUE")) {
+            statement.setString(1, worldUuid.toString());
+            statement.setInt(2, homelandId);
+            if (statement.executeUpdate() != 1) {
+                throw new SQLException("Pending overworld reset not found: " + homelandId);
             }
         }
     }

@@ -60,6 +60,15 @@ class HomelandWorldOperationPersistenceTest {
                         result.getString("overworld_reset_previous_uuid"));
             }
 
+            HomelandWorldOperations.recordGeneratedOverworldResetRecord(connection, 2, replacementUuid);
+            try (Statement statement = connection.createStatement();
+                 ResultSet result = statement.executeQuery("SELECT * FROM homeland WHERE id = 2")) {
+                assertTrue(result.next());
+                assertEquals(replacementUuid.toString(), result.getString("world_uuid"));
+                assertTrue(result.getBoolean("overworld_reset_pending"));
+                assertEquals(previousUuid.toString(), result.getString("overworld_reset_previous_uuid"));
+            }
+
             HomelandWorldOperations.finishOverworldResetRecord(
                     connection, 2, "flat", replacementUuid);
             try (Statement statement = connection.createStatement();
@@ -70,6 +79,21 @@ class HomelandWorldOperationPersistenceTest {
                 assertEquals("flat", result.getString("world_type"));
                 assertFalse(result.getBoolean("overworld_reset_pending"));
                 assertNull(result.getString("overworld_reset_previous_uuid"));
+            }
+        }
+    }
+
+    @Test
+    void generatedResetMarkerCannotOverwriteACompletedWorld() throws Exception {
+        try (Connection connection = database("generated-without-prepare")) {
+            UUID original = UUID.randomUUID();
+            insertHomeland(connection, 4, UUID.randomUUID(), "home", "homeland_generated_1", original, "default");
+            assertThrows(java.sql.SQLException.class, () ->
+                    HomelandWorldOperations.recordGeneratedOverworldResetRecord(connection, 4, UUID.randomUUID()));
+            try (Statement statement = connection.createStatement();
+                 ResultSet result = statement.executeQuery("SELECT world_uuid FROM homeland WHERE id = 4")) {
+                assertTrue(result.next());
+                assertEquals(original.toString(), result.getString("world_uuid"));
             }
         }
     }

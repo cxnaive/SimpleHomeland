@@ -116,7 +116,8 @@ public class CrossServerManager {
         JsonArray worldsArray = new JsonArray();
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             org.bukkit.NamespacedKey nk = world.getKey();
-            if ("homelands".equals(nk.getNamespace())) {
+            if ("homelands".equals(nk.getNamespace())
+                    && plugin.getHomelandManager().isHomelandWorldLoaded(nk.getKey())) {
                 worldsArray.add(nk.getKey());
             }
         }
@@ -567,7 +568,8 @@ public class CrossServerManager {
         JsonArray worldsArray = new JsonArray();
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             org.bukkit.NamespacedKey nk = world.getKey();
-            if ("homelands".equals(nk.getNamespace())) {
+            if ("homelands".equals(nk.getNamespace())
+                    && plugin.getHomelandManager().isHomelandWorldLoaded(nk.getKey())) {
                 worldsArray.add(nk.getKey());
             }
         }

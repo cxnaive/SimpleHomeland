@@ -42,6 +42,15 @@ public final class WorldsMigrationProbe extends JavaPlugin implements Listener {
         homeland = (SimpleHomelandPlugin) Bukkit.getPluginManager().getPlugin("SimpleHomeland");
         manager = homeland.getHomelandManager();
         Bukkit.getPluginManager().registerEvents(this, this);
+        if (Boolean.getBoolean("homeland.probe.upgrade-recovery")
+                || Boolean.getBoolean("homeland.probe.upgrade-recovery-restart")) {
+            new UpgradeRecoveryProbe(this, homeland).start();
+            return;
+        }
+        if (Boolean.getBoolean("homeland.probe.paper-end-return")) {
+            new PaperEndReturnProbe(this, homeland).start();
+            return;
+        }
         if (Boolean.getBoolean("homeland.probe.closed-cycle")) {
             new HuskHomesLazyCycleProbe(this, homeland).start();
             return;
@@ -230,6 +239,9 @@ public final class WorldsMigrationProbe extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
+        if (Boolean.getBoolean("homeland.probe.upgrade-recovery")
+                || Boolean.getBoolean("homeland.probe.upgrade-recovery-restart")
+                || Boolean.getBoolean("homeland.probe.paper-end-return")) return;
         if (Boolean.getBoolean("homeland.probe.closed-cycle")) return;
         if (Boolean.getBoolean("homeland.probe.create")) return;
         if (event.getPlayer().getName().equals("MigrationOwner")) {
@@ -408,12 +420,13 @@ public final class WorldsMigrationProbe extends JavaPlugin implements Listener {
     }
 
     @SuppressWarnings("unchecked")
-    private CompletableFuture<Void> resume(Homeland home, UUID previous) {
+    private CompletableFuture<Void> resume(Homeland home, UUID previous, UUID generated) {
         return homeland.getDatabaseQueue().submitFuture("probe-pending-reset", connection -> {
-            try (var statement = connection.prepareStatement("UPDATE homeland SET world_uuid = NULL, "
+            try (var statement = connection.prepareStatement("UPDATE homeland SET world_uuid = ?, "
                     + "world_type = 'flat', overworld_reset_pending = TRUE, overworld_reset_previous_uuid = ? WHERE id = ?")) {
-                statement.setString(1, previous.toString());
-                statement.setInt(2, home.getId());
+                statement.setString(1, generated == null ? null : generated.toString());
+                statement.setString(2, previous.toString());
+                statement.setInt(3, home.getId());
                 statement.executeUpdate();
             }
             return null;
@@ -424,7 +437,7 @@ public final class WorldsMigrationProbe extends JavaPlugin implements Listener {
                 home.setOverworldResetPreviousUuid(previous);
                 var storeField = HomelandManager.class.getDeclaredField("homelandStore");
                 storeField.setAccessible(true);
-                ((dev.user.homeland.manager.HomelandStore) storeField.get(manager)).updateWorldUuid(home, null);
+                ((dev.user.homeland.manager.HomelandStore) storeField.get(manager)).updateWorldUuid(home, generated);
                 var field = HomelandManager.class.getDeclaredField("worldOperations");
                 field.setAccessible(true);
                 Object operations = field.get(manager);
@@ -443,11 +456,11 @@ public final class WorldsMigrationProbe extends JavaPlugin implements Listener {
         manager.createHomelandAdmin(Bukkit.getConsoleSender(), owner, name, "void", () -> {
             Homeland home = manager.findHomeland(owner, name).orElseThrow();
             UUID previous = home.getWorldUuid();
-            resume(home, previous).thenCompose(ignored -> {
+            resume(home, previous, null).thenCompose(ignored -> {
                 require(!home.isOverworldResetPending(), "Reset recovery stayed pending");
                 require(!previous.equals(home.getWorldUuid()), "Pending reset did not regenerate world");
                 UUID completed = home.getWorldUuid();
-                return resume(home, previous).thenRun(() -> {
+                return resume(home, previous, completed).thenRun(() -> {
                     require(completed.equals(home.getWorldUuid()), "Finish recovery regenerated world twice");
                     require(!home.isOverworldResetPending(), "Finish recovery stayed pending");
                 });

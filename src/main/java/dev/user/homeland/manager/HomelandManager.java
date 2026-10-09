@@ -785,6 +785,9 @@ public class HomelandManager {
                     activeWorldLoads.remove(targetWorldKey, newLoad);
                     if (error == null) {
                         newLoad.complete(world);
+                        if (world != null) {
+                            Bukkit.getGlobalRegionScheduler().execute(plugin, this::publishLoadedWorlds);
+                        }
                     } else {
                         newLoad.completeExceptionally(error);
                     }
@@ -799,6 +802,10 @@ public class HomelandManager {
         }
         World existing = getHomelandWorld(targetWorldKey);
         if (existing != null) {
+            if (!plugin.getWorldService().isReady(targetWorldKey)) {
+                return CompletableFuture.failedFuture(new IOException(
+                        "World migration is unfinished: " + targetWorldKey));
+            }
             touchLastPlayerTime(targetWorldKey);
             return CompletableFuture.completedFuture(existing);
         }
@@ -812,16 +819,12 @@ public class HomelandManager {
         plugin.getWorldService().load(targetWorldKey, homeland).thenAccept(world -> {
             Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
                 try {
-                    int radius = homeland.getBorderRadius();
-                    world.getWorldBorder().setCenter(0, 0);
-                    world.getWorldBorder().setSize(radius * 2);
-                    world.setAutoSave(true);
+                    HomelandWorldSettings.applyLoadedWorld(plugin, homeland, world);
                     touchLastPlayerTime(targetWorldKey);
                     // 懒迁移：填充缺失的 world_uuid
                     if (!homeland.isOverworldResetPending()) {
                         updateWorldUuid(homeland, targetWorldKey, world.getUID());
                     }
-                    publishLoadedWorlds();
                     result.complete(world);
                 } catch (Throwable error) {
                     result.completeExceptionally(error);
@@ -997,78 +1000,19 @@ public class HomelandManager {
                 + ", worldName=" + worldName + ", bypass=" + bypassAccessCheck
                 + ", loc=" + (location != null));
 
-        if (HomelandWorldKeys.nameDimension(worldName) != HomelandDimension.OVERWORLD) {
-            queryHomelandByWorldNameAsync(worldName, info -> {
-                if (info == null) callback.accept(TeleportResult.WORLD_NOT_FOUND);
-                else teleportToHomelandByWorldKeyAPI(player, info.worldKey(), bypassAccessCheck, location, callback);
-            });
-            return;
-        }
-
-        String key = HomelandWorldKeys.normalize(worldName);
-        if (!key.equals(worldName)) {
-            teleportToHomelandByWorldKeyAPI(player, key, bypassAccessCheck, location, callback);
-            return;
-        }
-        // 主服务器：查内存缓存
-        Homeland homeland = findHomelandByName(worldName);
-        if (homeland != null) {
-            plugin.getLogger().info("[API] teleportByWorldName: cache hit, owner=" + homeland.getOwnerUuid());
-            teleportToHomelandInternal(player, homeland, homeland.getWorldKey(), bypassAccessCheck, location, callback);
-            return;
-        }
-
-        // 先尝试按 Bukkit 名称查找（主模式和分支模式都先查本地）
-        plugin.getLogger().info("[API] teleportByWorldName: cache miss, falling back to Bukkit.getWorld");
-        World bukkitWorld = Bukkit.getWorld(worldName);
-        if (bukkitWorld != null) {
-            plugin.getLogger().info("[API] teleportByWorldName: Bukkit found world=" + bukkitWorld.getName());
-            if (routeLoadedHomelandWorld(player, bukkitWorld, bypassAccessCheck,
-                    location, callback)) return;
-            if (isUnregisteredHomelandWorld(bukkitWorld)) {
+        queryHomelandByWorldNameAsync(worldName, info -> {
+            if (info != null) {
+                teleportToHomelandByWorldKeyAPI(player, info.worldKey(), bypassAccessCheck, location, callback);
+                return;
+            }
+            World bukkitWorld = Bukkit.getWorld(worldName);
+            if (bukkitWorld == null || isUnregisteredHomelandWorld(bukkitWorld)) {
                 callback.accept(TeleportResult.WORLD_NOT_FOUND);
                 return;
             }
-            if (bypassAccessCheck) {
-                doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
-                return;
-            }
-            // 非 bypass：仍需查 DB 做权限检查，但使用本地世界直接传送
-            if (branchMode) {
-                queryHomelandByWorldNameAsync(worldName, info -> {
-                    if (info == null) {
-                        doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
-                        return;
-                    }
-                    if (!canEnterWorld(player, info.worldKey())) {
-                        callback.accept(TeleportResult.ACCESS_DENIED);
-                        return;
-                    }
-                    doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS);
-                });
-                return;
-            }
-            doTeleportWithResult(player, bukkitWorld, location, callback, TeleportResult.SUCCESS_OTHER_WORLD);
-            return;
-        }
-
-        // 分支模式：查数据库 + 跨服传送
-        if (branchMode) {
-            plugin.getLogger().info("[API] teleportByWorldName: branch mode, querying DB");
-            queryHomelandByWorldNameAsync(worldName, info -> {
-                if (info == null) {
-                    callback.accept(TeleportResult.WORLD_NOT_FOUND);
-                    return;
-                }
-                Homeland h = new Homeland(0, info.ownerUuid(), info.name(), info.worldKey(),
-                        info.borderRadius(), info.hasNether(), info.hasEnd(), info.isPublic(), null);
-                teleportToHomelandInternal(player, h, info.worldKey(), bypassAccessCheck, location, callback);
-            });
-            return;
-        }
-
-        plugin.getLogger().info("[API] teleportByWorldName: world not found anywhere");
-        callback.accept(TeleportResult.WORLD_NOT_FOUND);
+            doTeleportWithResult(player, bukkitWorld, location, callback,
+                    bypassAccessCheck ? TeleportResult.SUCCESS : TeleportResult.SUCCESS_OTHER_WORLD);
+        });
     }
 
     /**
@@ -1192,7 +1136,7 @@ public class HomelandManager {
         if (branchMode) {
             plugin.getLogger().info("[API] branch teleport: player=" + player.getName()
                     + ", worldKey=" + targetWorldKey + ", bypass=" + bypassAccessCheck);
-            if (!bypassAccessCheck && !canEnterWorld(player, targetWorldKey)) {
+            if (!bypassAccessCheck && !hasWorldAccess(player, targetWorldKey)) {
                 callback.accept(TeleportResult.ACCESS_DENIED);
                 return;
             }
@@ -1203,7 +1147,7 @@ public class HomelandManager {
         }
         plugin.getLogger().info("[API] internal: player=" + player.getName()
                 + ", worldKey=" + targetWorldKey + ", bypass=" + bypassAccessCheck);
-        if (!bypassAccessCheck && !canEnterWorld(player, targetWorldKey)) {
+        if (!bypassAccessCheck && !hasWorldAccess(player, targetWorldKey)) {
             plugin.getLogger().info("[API] internal: ACCESS_DENIED for player=" + player.getName());
             callback.accept(TeleportResult.ACCESS_DENIED);
             return;
@@ -1212,29 +1156,24 @@ public class HomelandManager {
         // 标记绕过，防止 TeleportListener 二次拦截
         apiBypass.add(player.getUniqueId());
 
-        World world = getHomelandWorld(targetWorldKey);
-        if (world != null) {
-            plugin.getLogger().info("[API] internal: world already loaded, teleporting");
-            doTeleport(player, world, location, callback);
-        } else {
-            plugin.getLogger().info("[API] internal: world not loaded, loading async...");
-            loadHomelandWorldAsync(targetWorldKey, homeland, loadedWorld -> {
-                if (loadedWorld == null) {
-                    plugin.getLogger().info("[API] internal: async load FAILED for worldKey=" + targetWorldKey);
-                    apiBypass.remove(player.getUniqueId());
-                    callback.accept(TeleportResult.WORLD_LOAD_FAILED);
-                    return;
-                }
-                plugin.getLogger().info("[API] internal: async load success, teleporting");
-                doTeleport(player, loadedWorld, location, callback);
-            }, error -> {
+        // Join the load even if Bukkit already exposes its world. Migration and
+        // settings must complete before any caller gets permission to teleport.
+        loadHomelandWorldAsync(targetWorldKey, homeland, loadedWorld -> {
+            if (loadedWorld == null) {
+                plugin.getLogger().info("[API] internal: async load FAILED for worldKey=" + targetWorldKey);
                 apiBypass.remove(player.getUniqueId());
-                if (error instanceof HomelandOperationCoordinator.BusyException) {
-                    plugin.getLogger().info("[API] internal: load busy for worldKey=" + targetWorldKey);
-                }
                 callback.accept(TeleportResult.WORLD_LOAD_FAILED);
-            });
-        }
+                return;
+            }
+            plugin.getLogger().info("[API] internal: async load success, teleporting");
+            doTeleport(player, loadedWorld, location, callback);
+        }, error -> {
+            apiBypass.remove(player.getUniqueId());
+            if (error instanceof HomelandOperationCoordinator.BusyException) {
+                plugin.getLogger().info("[API] internal: load busy for worldKey=" + targetWorldKey);
+            }
+            callback.accept(TeleportResult.WORLD_LOAD_FAILED);
+        });
     }
 
     /**
@@ -1324,16 +1263,9 @@ public class HomelandManager {
      * 异步查询家园是否存在（通过家园名称，全局唯一）。
      */
     public void queryHomelandByWorldNameAsync(String worldName, java.util.function.Consumer<HomelandInfo> callback) {
-        String key = HomelandWorldKeys.normalize(worldName);
-        if (!key.equals(worldName)) {
-            queryHomelandByWorldKeyAsync(key, callback);
-            return;
-        }
-        HomelandDimension dimension = HomelandWorldKeys.nameDimension(worldName);
-        Homeland cached = findHomelandByName(HomelandWorldKeys.baseName(worldName));
+        Homeland cached = findHomelandByName(worldName);
         if (cached != null) {
-            callback.accept(dimension.isUnlocked(cached)
-                    ? toHomelandInfo(cached, dimension.worldKey(cached)) : null);
+            callback.accept(toHomelandInfo(cached));
             return;
         }
         plugin.getDatabaseQueue().submit("query-homeland-name", conn ->
@@ -1505,7 +1437,7 @@ public class HomelandManager {
         }
 
         if (!branchMode) {
-            return getHomelandWorld(worldKey) != null;
+            return getHomelandWorld(worldKey) != null && !isWorldOperationPending(worldKey);
         }
         return plugin.getCrossServerManager().isWorldLoadedOnMain(worldKey);
     }
@@ -1522,7 +1454,7 @@ public class HomelandManager {
         }
 
         if (!branchMode) {
-            callback.accept(getHomelandWorld(worldKey) != null);
+            callback.accept(isHomelandWorldLoaded(worldKey));
             return;
         }
         plugin.getDatabaseQueue().submit("query-world-loaded-" + worldKey, conn -> {
@@ -1547,7 +1479,7 @@ public class HomelandManager {
         if (branchMode) return false;
         Homeland h = getHomelandByWorldUUID(worldUUID);
         if (h == null) return false;
-        return getHomelandWorld(homelandStore.getWorldKeyByUuid(worldUUID)) != null;
+        return isHomelandWorldLoaded(homelandStore.getWorldKeyByUuid(worldUUID));
     }
 
     /**
@@ -1557,7 +1489,7 @@ public class HomelandManager {
     public void isHomelandWorldLoadedByUUIDAsync(UUID worldUUID, java.util.function.Consumer<Boolean> callback) {
         if (!branchMode) {
             Homeland h = getHomelandByWorldUUID(worldUUID);
-            callback.accept(h != null && getHomelandWorld(homelandStore.getWorldKeyByUuid(worldUUID)) != null);
+            callback.accept(h != null && isHomelandWorldLoaded(homelandStore.getWorldKeyByUuid(worldUUID)));
             return;
         }
         queryHomelandByWorldUUIDAsync(worldUUID, info -> {
@@ -1722,6 +1654,13 @@ public class HomelandManager {
     private void loadWorldKeyIndex() {
         if (!worldIndexLoadInProgress.compareAndSet(false, true)) return;
         plugin.getDatabaseQueue().submit("load-world-key-index", conn -> {
+            if (!branchMode) {
+                try {
+                    plugin.getWorldService().loadMigrationState();
+                } catch (IOException error) {
+                    throw new SQLException("Could not read world migration state", error);
+                }
+            }
             if (startupMigrationEnabled) plugin.getLogger().info("启动迁移准备: 正在读取家园索引及旧世界 UUID...");
             List<Homeland> homelands = new ArrayList<>();
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -1812,7 +1751,7 @@ public class HomelandManager {
             String key = entry.getKey();
             Homeland h = entry.getValue();
             World world = getHomelandWorld(key);
-            if (world != null) {
+            if (world != null && plugin.getWorldService().isReady(key)) {
                 int radius = h.getBorderRadius();
                 Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
                     world.getWorldBorder().setCenter(0, 0);
@@ -2295,6 +2234,10 @@ public class HomelandManager {
      */
     public boolean canEnterWorld(Player player, String worldKey) {
         if (isWorldOperationPending(worldKey)) return false;
+        return hasWorldAccess(player, worldKey);
+    }
+
+    private boolean hasWorldAccess(Player player, String worldKey) {
         Homeland homeland = homelandStore.getByWorldKey(worldKey);
         if (homeland == null) return true; // 非家园世界，不拦截
 
@@ -2322,6 +2265,9 @@ public class HomelandManager {
     }
 
     public boolean isWorldOperationPending(String worldKey) {
+        worldKey = HomelandWorldKeys.normalize(worldKey);
+        if (activeWorldLoads.containsKey(worldKey)
+                || (!branchMode && !plugin.getWorldService().isReady(worldKey))) return true;
         if (worldOperations.isCleanupPending(worldKey)) return true;
         Homeland homeland = homelandStore.getByWorldKey(worldKey);
         return homeland != null && isWorldUnavailable(homeland);

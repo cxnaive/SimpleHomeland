@@ -47,10 +47,20 @@ final class HomelandWorldIdentity {
     }
 
     static HomelandInfo queryName(Connection connection, String name) throws SQLException {
+        HomelandInfo exact = queryDisplayName(connection, name, HomelandDimension.OVERWORLD);
+        if (exact != null) return exact;
+        String key = HomelandWorldKeys.normalize(name);
+        if (!key.equals(name)) return queryKey(connection, key);
         HomelandDimension dimension = HomelandWorldKeys.nameDimension(name);
+        return dimension == HomelandDimension.OVERWORLD ? null
+                : queryDisplayName(connection, HomelandWorldKeys.baseName(name), dimension);
+    }
+
+    private static HomelandInfo queryDisplayName(Connection connection, String name,
+                                                 HomelandDimension dimension) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("SELECT " + COLUMNS
                 + " FROM homeland WHERE LOWER(name) = LOWER(?)")) {
-            statement.setString(1, HomelandWorldKeys.baseName(name));
+            statement.setString(1, name);
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next()) return null;
                 if (dimension != HomelandDimension.OVERWORLD

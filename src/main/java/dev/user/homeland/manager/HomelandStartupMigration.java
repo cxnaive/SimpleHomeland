@@ -3,6 +3,7 @@ package dev.user.homeland.manager;
 import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.model.Homeland;
 import dev.user.homeland.model.HomelandDimension;
+import dev.user.homeland.manager.HomelandWorldService.UnloadFailure;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 
@@ -165,8 +166,4 @@ final class HomelandStartupMigration {
 
     record Job(Homeland homeland, String key, HomelandDimension dimension) {}
 
-    static final class UnloadFailure extends IOException {
-        UnloadFailure(String message) { super(message); }
-        UnloadFailure(String message, Throwable cause) { super(message, cause); }
-    }
 }

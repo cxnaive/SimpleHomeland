@@ -35,32 +35,12 @@ public class WorldLoadListener implements Listener {
         if (homeland == null) return;
         if (plugin.getHomelandManager().isWorldOperationPending(worldKey)) return;
 
-        // 开启自动保存
-        world.setAutoSave(true);
-
-        // 恢复 WorldBorder
-        int borderRadius = homeland.getBorderRadius();
+        // Managed loads apply this before completing their shared future. This
+        // listener covers already completed worlds loaded by another plugin.
         Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
-            world.getWorldBorder().setCenter(0, 0);
-            world.getWorldBorder().setSize(borderRadius * 2);
+            if (!plugin.getHomelandManager().isWorldOperationPending(worldKey)) {
+                HomelandWorldSettings.applyLoadedWorld(plugin, homeland, world);
+            }
         });
-
-        String baseWorldKey = homeland.getWorldKey();
-        if (!worldKey.equals(baseWorldKey)) {
-            // 子维度加载时：同步游戏规则和难度
-            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
-                World overworld = plugin.getHomelandManager().getHomelandWorld(baseWorldKey);
-                if (overworld != null) {
-                    HomelandWorldSettings.copyGamerules(
-                            overworld, world, plugin.getConfigManager());
-                    HomelandWorldSettings.copyDifficulty(overworld, world);
-                } else {
-                    HomelandWorldSettings.applyDefaultGamerules(
-                            world, plugin.getConfigManager());
-                    HomelandWorldSettings.applyDefaultDifficulty(
-                            world, plugin.getConfigManager());
-                }
-            });
-        }
     }
 }

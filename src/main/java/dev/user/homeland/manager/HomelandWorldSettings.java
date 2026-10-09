@@ -9,10 +9,28 @@ import net.thenextlvl.worlds.generator.GeneratorType;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.World;
+import org.bukkit.Bukkit;
+import dev.user.homeland.model.Homeland;
 
 public final class HomelandWorldSettings {
 
     private HomelandWorldSettings() {
+    }
+
+    /** Applies the load postconditions on the global region thread before entry is allowed. */
+    public static void applyLoadedWorld(SimpleHomelandPlugin plugin, Homeland homeland, World world) {
+        world.setAutoSave(true);
+        world.getWorldBorder().setCenter(0, 0);
+        world.getWorldBorder().setSize(homeland.getBorderRadius() * 2);
+        if (world.key().value().equals(homeland.getWorldKey())) return;
+        World overworld = Bukkit.getWorld(HomelandWorldKeys.bukkitKey(homeland.getWorldKey()));
+        if (overworld != null && plugin.getWorldService().isReady(homeland.getWorldKey())) {
+            copyGamerules(overworld, world, plugin.getConfigManager());
+            copyDifficulty(overworld, world);
+        } else {
+            applyDefaultGamerules(world, plugin.getConfigManager());
+            applyDefaultDifficulty(world, plugin.getConfigManager());
+        }
     }
 
     public static void applyWorldTypeGenerator(SimpleHomelandPlugin plugin, Level.Builder builder,

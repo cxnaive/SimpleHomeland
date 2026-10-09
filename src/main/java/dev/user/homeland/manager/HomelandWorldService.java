@@ -16,8 +16,10 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.UUID;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
 
 /** Worlds 4 lifecycle and the one-time, UUID-preserving Worlds 3 import. */
@@ -25,6 +27,12 @@ public final class HomelandWorldService {
     private final SimpleHomelandPlugin plugin;
     private final WorldsAccess worlds;
     private final HomelandWorldMigration migration;
+    private final Set<String> unavailableWorlds = ConcurrentHashMap.newKeySet();
+
+    static final class UnloadFailure extends IOException {
+        UnloadFailure(String message) { super(message); }
+        UnloadFailure(String message, Throwable cause) { super(message, cause); }
+    }
 
     public HomelandWorldService(SimpleHomelandPlugin plugin) {
         this.plugin = plugin;
@@ -39,6 +47,15 @@ public final class HomelandWorldService {
 
     public UUID legacyUuid(String key) throws IOException {
         return migration.legacyUuid(key);
+    }
+
+    /** Called by the asynchronous index scan before any homeland entry is allowed. */
+    void loadMigrationState() throws IOException {
+        unavailableWorlds.addAll(migration.pendingKeys());
+    }
+
+    public boolean isReady(String key) {
+        return !unavailableWorlds.contains(HomelandWorldKeys.normalize(key));
     }
 
     /** Checks legacy import/retry, or UUID persistence left unfinished after a previous import. */
@@ -60,6 +77,12 @@ public final class HomelandWorldService {
     }
 
     CompletableFuture<World> load(String key, Homeland homeland, BooleanSupplier cancelled) {
+        World existing = Bukkit.getWorld(HomelandWorldKeys.bukkitKey(key));
+        if (existing != null) {
+            return isReady(key) ? CompletableFuture.completedFuture(existing)
+                    : CompletableFuture.failedFuture(new IOException("World migration is unfinished: " + key));
+        }
+        unavailableWorlds.add(key);
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return migration.prepare(key, cancelled);
@@ -75,37 +98,55 @@ public final class HomelandWorldService {
                 UUID expected = preparation.uuid() != null ? preparation.uuid()
                         : homeland.getWorldUuid(HomelandWorldKeys.dimension(key));
                 if (!homeland.isOverworldResetPending() && expected != null && !expected.equals(world.getUID())) {
-                    return worlds.unload(world, false).thenCompose(ignored ->
-                            CompletableFuture.failedFuture(new IOException(
-                                    "Migration changed world UUID: " + key + " (expected "
-                                            + expected + ", found " + world.getUID() + ")")));
+                    return failAfterUnload(world, new IOException(
+                            "Migration changed world UUID: " + key + " (expected "
+                                    + expected + ", found " + world.getUID() + ")"));
                 }
-                CompletableFuture<World> finish = CompletableFuture.supplyAsync(() -> {
-                    try {
-                        migration.complete(key);
-                        register(world);
-                        return world;
-                    } catch (IOException error) {
-                        throw new CompletionException(error);
-                    }
-                });
-                return finish.exceptionallyCompose(error -> worlds.unload(world, false)
-                        .thenCompose(ignored -> CompletableFuture.failedFuture(error)));
+                return finishLoading(key, world);
             });
         });
     }
 
     public CompletableFuture<World> create(Level level) {
-        return level.create().thenCompose(world -> CompletableFuture.supplyAsync(() -> {
+        String key = level.key().value();
+        if (Bukkit.getWorld(HomelandWorldKeys.bukkitKey(key)) != null) {
+            return CompletableFuture.failedFuture(new IOException("World is already loaded: " + key));
+        }
+        unavailableWorlds.add(key);
+        return level.create().thenCompose(world -> finishLoading(key, world));
+    }
+
+    private CompletableFuture<World> finishLoading(String key, World world) {
+        return CompletableFuture.supplyAsync(() -> {
             try {
-                migration.complete(world.key().value());
                 register(world);
+                migration.complete(key);
+                unavailableWorlds.remove(key);
                 return world;
             } catch (IOException error) {
                 throw new CompletionException(error);
             }
-        }).exceptionallyCompose(error -> worlds.unload(world, false)
-                .thenCompose(ignored -> CompletableFuture.failedFuture(error))));
+        }).exceptionallyCompose(error -> failAfterUnload(world, error));
+    }
+
+    private CompletableFuture<World> failAfterUnload(World world, Throwable error) {
+        Throwable cause = HomelandWorldOperations.unwrap(error);
+        CompletableFuture<Boolean> cleanup;
+        try {
+            cleanup = worlds.unload(world, false);
+        } catch (Throwable unloadError) {
+            cleanup = CompletableFuture.failedFuture(unloadError);
+        }
+        return cleanup.handle((unloaded, unloadError) -> {
+            if (unloadError != null || !Boolean.TRUE.equals(unloaded)) {
+                UnloadFailure failure = new UnloadFailure(
+                        "Could not unload unfinished world; entry remains blocked: " + world.key(), cause);
+                if (unloadError != null) failure.addSuppressed(HomelandWorldOperations.unwrap(unloadError));
+                throw new CompletionException(failure);
+            }
+            // Keep the failed state until a successful retry; never expose pending data.
+            throw new CompletionException(cause);
+        });
     }
 
     /** Saves and unloads a world after startup migration while retaining its converted files. */
@@ -140,6 +181,7 @@ public final class HomelandWorldService {
                     worlds.getWorldRegistry().unregister(HomelandWorldKeys.key(key));
                 }
                 worlds.getScheduler().cancel(HomelandWorldKeys.key(key));
+                unavailableWorlds.remove(key);
             } catch (IOException error) {
                 throw new CompletionException(error);
             }

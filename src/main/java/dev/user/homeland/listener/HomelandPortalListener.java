@@ -2,6 +2,7 @@ package dev.user.homeland.listener;
 
 import dev.user.homeland.SimpleHomelandPlugin;
 import dev.user.homeland.compat.FoliaPortalBridge;
+import dev.user.homeland.compat.PaperPortalBridge;
 import dev.user.homeland.manager.HomelandWorldKeys;
 import dev.user.homeland.model.Homeland;
 import dev.user.homeland.model.HomelandDimension;
@@ -32,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class HomelandPortalListener implements Listener {
     private final SimpleHomelandPlugin plugin;
     private final FoliaPortalBridge folia;
+    private final PaperPortalBridge paper;
     private final Map<UUID, PortalTicks> ticks = new ConcurrentHashMap<>();
     private final Set<UUID> loading = ConcurrentHashMap.newKeySet();
     private final Set<UUID> messages = ConcurrentHashMap.newKeySet();
@@ -47,6 +49,11 @@ public final class HomelandPortalListener implements Listener {
             throw new IllegalStateException("Folia 26.2 portal API is unavailable", error);
         }
         folia = bridge;
+        try {
+            paper = folia == null ? new PaperPortalBridge() : null;
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Paper 26.2 portal API is unavailable", error);
+        }
     }
 
     private Homeland homeland(World world) {
@@ -130,9 +137,22 @@ public final class HomelandPortalListener implements Listener {
         return delay == null ? 80 : Math.max(1, delay);
     }
 
-    private void teleportEnd(Entity entity, World target) {
+    private void teleportEnd(Entity entity, World target) throws ReflectiveOperationException {
         if (target.getEnvironment() != World.Environment.THE_END) {
-            entity.teleportAsync(target.getSpawnLocation(), TeleportCause.END_PORTAL);
+            if (entity instanceof Player player) {
+                Location respawn = player.getRespawnLocation();
+                boolean credits = paper.creditsEnabled(entity.getWorld());
+                player.teleportAsync(respawn == null ? target.getSpawnLocation() : respawn, TeleportCause.END_PORTAL)
+                        .thenAccept(success -> {
+                            if (!success) return;
+                            player.getScheduler().execute(plugin, () -> {
+                                if (!player.hasSeenWinScreen()) {
+                                    player.setHasSeenWinScreen(true);
+                                    if (credits) player.showWinScreen();
+                                }
+                            }, () -> {}, 1L);
+                        });
+            } else entity.teleportAsync(target.getSpawnLocation(), TeleportCause.END_PORTAL);
             return;
         }
         Location spawn = new Location(target, 100.5, 49, 0.5, 90, 0);

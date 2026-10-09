@@ -38,6 +38,7 @@ class HomelandWorldMigrationTest {
         UUID uuid = legacy();
         var preparation = migration().prepare(KEY);
         assertTrue(preparation.legacy());
+        assertEquals(java.util.Set.of(KEY), migration().pendingKeys());
         assertEquals(uuid, preparation.uuid());
         assertEquals("blocks-and-container", Files.readString(preparation.staging().resolve("DIM-1/region/r.0.0.mca")));
         assertEquals("entities", Files.readString(preparation.staging().resolve("entities/r.0.0.mca")));
@@ -67,6 +68,7 @@ class HomelandWorldMigrationTest {
         Files.createDirectories(migration().target(KEY));
         migration().complete(KEY);
         assertFalse(migration().prepare(KEY).legacy());
+        assertTrue(migration().pendingKeys().isEmpty());
         assertNull(migration().legacyUuid(KEY));
         HomelandWorldService.deleteTree(migration().target(KEY));
         assertThrows(java.io.IOException.class, () -> migration().prepare(KEY));

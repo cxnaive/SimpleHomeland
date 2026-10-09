@@ -82,7 +82,7 @@ class HomelandStartupMigrationTest {
         started.set(0);
         CompletableFuture<Void> failure = HomelandStartupMigration.runSerial(jobs(3), job -> {
             started.incrementAndGet();
-            return CompletableFuture.failedFuture(new HomelandStartupMigration.UnloadFailure("unload failed"));
+            return CompletableFuture.failedFuture(new HomelandWorldService.UnloadFailure("unload failed"));
         }, () -> false, (job, error) -> {});
         assertThrows(java.util.concurrent.ExecutionException.class, () -> failure.get(5, TimeUnit.SECONDS));
         assertEquals(1, started.get());
