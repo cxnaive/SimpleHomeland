@@ -90,7 +90,7 @@ public class RedisManager {
         JsonArray worldsArray = new JsonArray();
         for (var world : Bukkit.getWorlds()) {
             var nk = world.getKey();
-            if ("simplehomeland".equals(nk.getNamespace())) {
+            if ("homelands".equals(nk.getNamespace())) {
                 worldsArray.add(nk.getKey());
             }
         }
@@ -254,24 +254,8 @@ public class RedisManager {
         }
     }
 
-    public void sendTeleportRequest(UUID playerUuid, UUID ownerUuid, String homelandName,
-                                    boolean bypassAccess, @Nullable Location targetLocation) {
+    public void sendTeleportRequest(Map<String, Object> payloadMap) {
         ConfigManager config = plugin.getConfigManager();
-
-        Map<String, Object> payloadMap = new LinkedHashMap<>();
-        payloadMap.put("playerUuid", playerUuid.toString());
-        payloadMap.put("ownerUuid", ownerUuid.toString());
-        payloadMap.put("homelandName", homelandName);
-        payloadMap.put("bypassAccess", bypassAccess);
-        if (targetLocation != null) {
-            Map<String, Object> locMap = new LinkedHashMap<>();
-            locMap.put("x", targetLocation.getX());
-            locMap.put("y", targetLocation.getY());
-            locMap.put("z", targetLocation.getZ());
-            locMap.put("yaw", targetLocation.getYaw());
-            locMap.put("pitch", targetLocation.getPitch());
-            payloadMap.put("targetLocation", locMap);
-        }
 
         JsonObject wrapper = new JsonObject();
         wrapper.addProperty("type", "TELEPORT_REQUEST");

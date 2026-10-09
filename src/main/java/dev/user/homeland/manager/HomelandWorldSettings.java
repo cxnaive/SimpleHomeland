@@ -2,10 +2,10 @@ package dev.user.homeland.manager;
 
 import dev.user.homeland.config.ConfigManager;
 import dev.user.homeland.config.ConfigManager.GameRuleConfig;
-import dev.user.homeland.generator.SkyblockChunkGenerator;
-import net.thenextlvl.worlds.api.generator.GeneratorType;
-import net.thenextlvl.worlds.api.level.Level;
-import net.thenextlvl.worlds.api.preset.Presets;
+import dev.user.homeland.SimpleHomelandPlugin;
+import net.thenextlvl.worlds.Level;
+import net.thenextlvl.worlds.generator.Generator;
+import net.thenextlvl.worlds.generator.GeneratorType;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.World;
@@ -15,14 +15,14 @@ public final class HomelandWorldSettings {
     private HomelandWorldSettings() {
     }
 
-    public static void applyWorldTypeGenerator(Level.Builder builder, String worldType) {
+    public static void applyWorldTypeGenerator(SimpleHomelandPlugin plugin, Level.Builder builder,
+                                               String worldType) {
         if ("void".equals(worldType)) {
-            builder.chunkGenerator(new SkyblockChunkGenerator())
+            builder.generator(Generator.of(plugin, "void"))
                     .structures(false)
                     .bonusChest(false);
         } else if ("flat".equals(worldType)) {
             builder.generatorType(GeneratorType.FLAT)
-                    .preset(Presets.CLASSIC_FLAT)
                     .structures(false)
                     .bonusChest(false);
         }

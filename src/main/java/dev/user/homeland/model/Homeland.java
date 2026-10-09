@@ -11,6 +11,8 @@ public class Homeland {
     private final String name;
     private final String worldKey;
     private volatile UUID worldUuid;
+    private volatile UUID netherUuid;
+    private volatile UUID endUuid;
     private volatile String worldType;
     private final AtomicBoolean overworldResetPending;
     private volatile UUID overworldResetPreviousUuid;
@@ -73,6 +75,20 @@ public class Homeland {
     public String getWorldKey() { return worldKey; }
     public UUID getWorldUuid() { return worldUuid; }
     public void setWorldUuid(UUID worldUuid) { this.worldUuid = worldUuid; }
+    public UUID getWorldUuid(HomelandDimension dimension) {
+        return switch (dimension) {
+            case OVERWORLD -> worldUuid;
+            case NETHER -> netherUuid;
+            case END -> endUuid;
+        };
+    }
+    public void setWorldUuid(HomelandDimension dimension, UUID uuid) {
+        switch (dimension) {
+            case OVERWORLD -> worldUuid = uuid;
+            case NETHER -> netherUuid = uuid;
+            case END -> endUuid = uuid;
+        }
+    }
     public String getWorldType() { return worldType; }
     public void setWorldType(String worldType) { this.worldType = worldType != null ? worldType : "default"; }
     public boolean isOverworldResetPending() { return overworldResetPending.get(); }

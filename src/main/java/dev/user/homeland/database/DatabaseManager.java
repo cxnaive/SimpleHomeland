@@ -150,6 +150,8 @@ public class DatabaseManager {
             }
 
             addColumnIfMissing(conn, stmt, "homeland", "world_uuid", "VARCHAR(36)");
+            addColumnIfMissing(conn, stmt, "homeland", "nether_uuid", "VARCHAR(36)");
+            addColumnIfMissing(conn, stmt, "homeland", "end_uuid", "VARCHAR(36)");
             addColumnIfMissing(conn, stmt, "homeland", "world_type",
                     "VARCHAR(16) DEFAULT 'default'");
             addColumnIfMissing(conn, stmt, "homeland", "overworld_reset_pending",
@@ -292,11 +294,15 @@ public class DatabaseManager {
         return false;
     }
 
-    private boolean hasSingleColumnUniqueIndex(Connection connection, String table,
+    static boolean hasSingleColumnUniqueIndex(Connection connection, String table,
                                                String column) throws SQLException {
+        var metadata = connection.getMetaData();
+        String metadataTable = metadata.storesUpperCaseIdentifiers()
+                ? table.toUpperCase(java.util.Locale.ROOT)
+                : metadata.storesLowerCaseIdentifiers() ? table.toLowerCase(java.util.Locale.ROOT) : table;
         Map<String, Set<String>> indexColumns = new HashMap<>();
-        try (ResultSet indexes = connection.getMetaData().getIndexInfo(
-                connection.getCatalog(), null, table, true, false)) {
+        try (ResultSet indexes = metadata.getIndexInfo(
+                connection.getCatalog(), null, metadataTable, true, false)) {
             while (indexes.next()) {
                 if (indexes.getBoolean("NON_UNIQUE")) continue;
                 String indexName = indexes.getString("INDEX_NAME");

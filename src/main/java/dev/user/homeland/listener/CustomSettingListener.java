@@ -27,7 +27,7 @@ public class CustomSettingListener implements Listener {
         if (type != Material.ICE && type != Material.SNOW && type != Material.FROSTED_ICE) return;
 
         var namespacedKey = event.getBlock().getWorld().getKey();
-        if (!"simplehomeland".equals(namespacedKey.getNamespace())) return;
+        if (!"homelands".equals(namespacedKey.getNamespace())) return;
 
         String worldKey = namespacedKey.getKey();
         Homeland homeland = plugin.getHomelandManager().getHomelandByWorldKey(worldKey);

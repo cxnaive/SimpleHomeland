@@ -15,11 +15,15 @@ import dev.user.homeland.listener.HomelandProtectionListener;
 import dev.user.homeland.listener.CommandBlockListener;
 import dev.user.homeland.listener.CustomSettingListener;
 import dev.user.homeland.listener.TeleportListener;
+import dev.user.homeland.listener.HomelandPortalListener;
 import dev.user.homeland.listener.WorldLoadListener;
 import dev.user.homeland.manager.HomelandManager;
+import dev.user.homeland.manager.HomelandWorldService;
+import dev.user.homeland.generator.SkyblockChunkGenerator;
 import dev.user.homeland.placeholder.HomelandExpansion;
-import net.thenextlvl.worlds.api.WorldsProvider;
+import net.thenextlvl.worlds.WorldsAccess;
 import org.bukkit.entity.Player;
+import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class SimpleHomelandPlugin extends JavaPlugin {
@@ -32,7 +36,8 @@ public class SimpleHomelandPlugin extends JavaPlugin {
     private EconomyManager economyManager;
     private PlayerPointsManager playerPointsManager;
     private HomelandManager homelandManager;
-    private WorldsProvider worldsProvider;
+    private WorldsAccess worldsAccess;
+    private HomelandWorldService worldService;
     private HomelandExpansion homelandExpansion;
     private CrossServerManager crossServerManager;
 
@@ -73,6 +78,11 @@ public class SimpleHomelandPlugin extends JavaPlugin {
 
         this.economyManager = new EconomyManager(this);
         economyManager.init();
+        if (!economyManager.isEnabled()) {
+            getLogger().severe("XConomy 不可用，插件将禁用！");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         this.playerPointsManager = new PlayerPointsManager(this);
         playerPointsManager.init();
@@ -81,9 +91,16 @@ public class SimpleHomelandPlugin extends JavaPlugin {
 
         // 获取 Worlds API（仅主服务器模式需要）
         if (!isBranchMode) {
-            this.worldsProvider = getServer().getServicesManager().load(WorldsProvider.class);
-            if (worldsProvider == null) {
+            if (getServer().getPluginManager().getPlugin("Worlds") == null) {
                 getLogger().severe("未找到 Worlds 插件，主服务器模式无法运行！");
+                getServer().getPluginManager().disablePlugin(this);
+                return;
+            }
+            try {
+                this.worldsAccess = WorldsAccess.access();
+                this.worldService = new HomelandWorldService(this);
+            } catch (RuntimeException error) {
+                getLogger().severe("无法连接 Worlds 4 API: " + error.getMessage());
                 getServer().getPluginManager().disablePlugin(this);
                 return;
             }
@@ -103,6 +120,7 @@ public class SimpleHomelandPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new GUIListener(), this);
         if (!isBranchMode) {
             getServer().getPluginManager().registerEvents(new TeleportListener(this), this);
+            getServer().getPluginManager().registerEvents(new HomelandPortalListener(this), this);
             getServer().getPluginManager().registerEvents(new WorldLoadListener(this), this);
             getServer().getPluginManager().registerEvents(new HomelandProtectionListener(this), this);
             getServer().getPluginManager().registerEvents(new CommandBlockListener(this), this);
@@ -193,6 +211,12 @@ public class SimpleHomelandPlugin extends JavaPlugin {
     public EconomyManager getEconomyManager() { return economyManager; }
     public PlayerPointsManager getPlayerPointsManager() { return playerPointsManager; }
     public HomelandManager getHomelandManager() { return homelandManager; }
-    public WorldsProvider getWorldsProvider() { return worldsProvider; }
+    public WorldsAccess getWorldsAccess() { return worldsAccess; }
+    public HomelandWorldService getWorldService() { return worldService; }
+
+    @Override
+    public ChunkGenerator getDefaultWorldGenerator(String worldName, String id) {
+        return "void".equals(id) ? new SkyblockChunkGenerator() : null;
+    }
     public CrossServerManager getCrossServerManager() { return crossServerManager; }
 }

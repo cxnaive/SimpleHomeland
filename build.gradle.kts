@@ -2,11 +2,11 @@ plugins {
     java
     `java-library`
     `maven-publish`
-    id("com.gradleup.shadow") version "8.3.5"
+    id("com.gradleup.shadow") version "9.6.1"
 }
 
 group = "dev.user"
-version = "1.9.1"
+version = "2.0.0"
 
 repositories {
     mavenCentral()
@@ -19,15 +19,15 @@ repositories {
 }
 
 dependencies {
-    compileOnly("dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("dev.folia:folia-api:26.2.build.7-beta")
 
     // PlaceholderAPI (硬依赖)
-    compileOnly("me.clip:placeholderapi:2.11.6")
+    compileOnly("me.clip:placeholderapi:2.12.3")
 
     // Worlds 插件 (硬依赖)
-    compileOnly("net.thenextlvl:worlds:3.12.4")
+    compileOnly("net.thenextlvl:worlds:4.4.1")
 
-    // XConomy 经济插件 (软依赖)
+    // XConomy 经济插件 (硬依赖)
     compileOnly("com.github.YiC200333:XConomyAPI:2.25.1")
 
     // PlayerPoints 点券插件 (软依赖)
@@ -49,19 +49,32 @@ dependencies {
     compileOnly("net.momirealms:craft-engine-bukkit:26.7.4")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testRuntimeOnly("dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
+    testRuntimeOnly("dev.folia:folia-api:26.2.build.7-beta")
     testRuntimeOnly("com.h2database:h2:2.3.232")
     testRuntimeOnly("com.google.code.gson:gson:2.12.1")
 }
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-    sourceCompatibility = "21"
-    targetCompatibility = "21"
+    sourceCompatibility = "25"
+    targetCompatibility = "25"
 }
 
 tasks.test {
     useJUnitPlatform()
+}
+
+val integrationProbe = sourceSets.create("integrationProbe") {
+    java.srcDir("integration-tests")
+    compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+}
+
+tasks.register<Jar>("integrationProbeJar") {
+    dependsOn(tasks.named(integrationProbe.classesTaskName))
+    archiveFileName.set("WorldsMigrationProbe.jar")
+    from(integrationProbe.output)
+    from("integration-tests/probe-plugin.yml") { rename { "plugin.yml" } }
 }
 
 tasks.shadowJar {
@@ -70,6 +83,7 @@ tasks.shadowJar {
 }
 
 tasks.processResources {
+    inputs.property("version", project.version)
     filesMatching("plugin.yml") {
         expand("version" to version)
     }

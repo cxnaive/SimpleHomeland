@@ -37,7 +37,7 @@ public final class SimpleHomelandAPI {
      * @param ownerUuid        家园所有者的 UUID
      * @param homelandName     家园名称
      * @param bypassAccessCheck 是否跳过访问权限检查
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomeland(Player player, UUID ownerUuid, String homelandName,
                                           boolean bypassAccessCheck, Consumer<TeleportResult> callback) {
@@ -52,7 +52,7 @@ public final class SimpleHomelandAPI {
      * @param homelandName     家园名称
      * @param bypassAccessCheck 是否跳过访问权限检查
      * @param location         目标位置，null 则传送到出生点
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomeland(Player player, UUID ownerUuid, String homelandName,
                                           boolean bypassAccessCheck, @Nullable Location location,
@@ -62,7 +62,7 @@ public final class SimpleHomelandAPI {
             callback.accept(TeleportResult.WORLD_NOT_FOUND);
             return;
         }
-        plugin.getHomelandManager().teleportToHomelandAPI(player, ownerUuid, homelandName, bypassAccessCheck, location, callback);
+        plugin.getHomelandManager().teleportToHomelandAPI(player, ownerUuid, homelandName, bypassAccessCheck, location, playerCallback(plugin, player, callback));
     }
 
     /**
@@ -73,7 +73,7 @@ public final class SimpleHomelandAPI {
      * @param player           要传送的玩家
      * @param worldUUID        世界 UUID（World.getUID()）
      * @param bypassAccessCheck 是否跳过访问权限检查
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomelandByWorldUUID(Player player, UUID worldUUID,
                                                       boolean bypassAccessCheck, Consumer<TeleportResult> callback) {
@@ -89,7 +89,7 @@ public final class SimpleHomelandAPI {
      * @param worldUUID        世界 UUID（World.getUID()）
      * @param bypassAccessCheck 是否跳过访问权限检查
      * @param location         目标位置，null 则传送到出生点
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomelandByWorldUUID(Player player, UUID worldUUID,
                                                       boolean bypassAccessCheck, @Nullable Location location,
@@ -99,16 +99,16 @@ public final class SimpleHomelandAPI {
             callback.accept(TeleportResult.WORLD_NOT_FOUND);
             return;
         }
-        plugin.getHomelandManager().teleportToHomelandByWorldUUIDAPI(player, worldUUID, bypassAccessCheck, location, callback);
+        plugin.getHomelandManager().teleportToHomelandByWorldUUIDAPI(player, worldUUID, bypassAccessCheck, location, playerCallback(plugin, player, callback));
     }
 
     /**
      * 将玩家传送到指定世界（出生点）。
      *
      * @param player           要传送的玩家
-     * @param worldKey         世界 key（家园 worldKey 或 Bukkit 世界名）
+     * @param worldKey         世界 key（裸 world_key、homelands:world_key 或 Bukkit 世界名）
      * @param bypassAccessCheck 是否跳过访问权限检查
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomelandByWorldKey(Player player, String worldKey,
                                                      boolean bypassAccessCheck, Consumer<TeleportResult> callback) {
@@ -119,10 +119,10 @@ public final class SimpleHomelandAPI {
      * 将玩家传送到指定世界的指定位置。
      *
      * @param player           要传送的玩家
-     * @param worldKey         世界 key（家园 worldKey 或 Bukkit 世界名）
+     * @param worldKey         世界 key（裸 world_key、homelands:world_key 或 Bukkit 世界名）
      * @param bypassAccessCheck 是否跳过访问权限检查
      * @param location         目标位置，null 则传送到出生点
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomelandByWorldKey(Player player, String worldKey,
                                                      boolean bypassAccessCheck, @Nullable Location location,
@@ -132,7 +132,7 @@ public final class SimpleHomelandAPI {
             callback.accept(TeleportResult.WORLD_NOT_FOUND);
             return;
         }
-        plugin.getHomelandManager().teleportToHomelandByWorldKeyAPI(player, worldKey, bypassAccessCheck, location, callback);
+        plugin.getHomelandManager().teleportToHomelandByWorldKeyAPI(player, worldKey, bypassAccessCheck, location, playerCallback(plugin, player, callback));
     }
 
     /**
@@ -141,9 +141,9 @@ public final class SimpleHomelandAPI {
      * 支持未加载的家园世界（会自动异步加载）。
      *
      * @param player           要传送的玩家
-     * @param worldName        家园名称（即 world.getName()，全局唯一）
+     * @param worldName        家园显示名称（全局唯一），也支持 Bukkit 世界名
      * @param bypassAccessCheck 是否跳过访问权限检查
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomelandByWorldName(Player player, String worldName,
                                                       boolean bypassAccessCheck, Consumer<TeleportResult> callback) {
@@ -156,10 +156,10 @@ public final class SimpleHomelandAPI {
      * 支持未加载的家园世界（会自动异步加载）。
      *
      * @param player           要传送的玩家
-     * @param worldName        家园名称（即 world.getName()，全局唯一）
+     * @param worldName        家园显示名称（全局唯一），也支持 Bukkit 世界名
      * @param bypassAccessCheck 是否跳过访问权限检查
      * @param location         目标位置，null 则传送到出生点
-     * @param callback         结果回调（主线程）
+     * @param callback         结果回调（玩家所在 region 线程；离线时返回 PLAYER_OFFLINE）
      */
     public static void teleportToHomelandByWorldName(Player player, String worldName,
                                                       boolean bypassAccessCheck, @Nullable Location location,
@@ -169,7 +169,7 @@ public final class SimpleHomelandAPI {
             callback.accept(TeleportResult.WORLD_NOT_FOUND);
             return;
         }
-        plugin.getHomelandManager().teleportToHomelandByWorldNameAPI(player, worldName, bypassAccessCheck, location, callback);
+        plugin.getHomelandManager().teleportToHomelandByWorldNameAPI(player, worldName, bypassAccessCheck, location, playerCallback(plugin, player, callback));
     }
 
     // ==================== 查询 API ====================
@@ -212,7 +212,7 @@ public final class SimpleHomelandAPI {
     /**
      * 异步查询家园是否存在（通过家园名称，全局唯一）。
      *
-     * @param worldName 家园名称（即 world.getName()）
+     * @param worldName 家园显示名称或 Bukkit 世界名
      * @param callback  结果回调，null 表示家园不存在
      */
     public static void queryHomelandByWorldNameAsync(String worldName,
@@ -360,5 +360,24 @@ public final class SimpleHomelandAPI {
             return;
         }
         plugin.getHomelandManager().isHomelandWorldLoadedByUUIDAsync(worldUUID, callback);
+    }
+
+    private static Consumer<TeleportResult> playerCallback(SimpleHomelandPlugin plugin, Player player,
+                                                          Consumer<TeleportResult> callback) {
+        java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean();
+        return result -> {
+            Runnable deliver = () -> {
+                if (completed.compareAndSet(false, true)) callback.accept(result);
+            };
+            Runnable offline = () -> {
+                if (completed.compareAndSet(false, true)) callback.accept(TeleportResult.PLAYER_OFFLINE);
+            };
+            if (org.bukkit.Bukkit.isOwnedByCurrentRegion(player)) {
+                deliver.run();
+                return;
+            }
+            boolean scheduled = player.getScheduler().execute(plugin, deliver, offline, 1L);
+            if (!scheduled) offline.run();
+        };
     }
 }

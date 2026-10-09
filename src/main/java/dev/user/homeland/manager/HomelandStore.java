@@ -1,6 +1,7 @@
 package dev.user.homeland.manager;
 
 import dev.user.homeland.model.Homeland;
+import dev.user.homeland.model.HomelandDimension;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -74,6 +75,17 @@ public final class HomelandStore {
         return id == null ? null : byId.get(id);
     }
 
+    public String getWorldKeyByUuid(UUID worldUuid) {
+        Homeland homeland = getByWorldUuid(worldUuid);
+        if (homeland == null) return null;
+        for (HomelandDimension dimension : HomelandDimension.values()) {
+            if (dimension.isUnlocked(homeland) && worldUuid.equals(homeland.getWorldUuid(dimension))) {
+                return dimension.worldKey(homeland);
+            }
+        }
+        return null;
+    }
+
     public Collection<Homeland> all() {
         return List.copyOf(byId.values());
     }
@@ -101,10 +113,15 @@ public final class HomelandStore {
             byWorldKey.remove(baseKey + "_the_end", homeland.getId());
         }
 
+        Set<UUID> current = new java.util.HashSet<>();
+        for (HomelandDimension dimension : HomelandDimension.values()) {
+            UUID uuid = homeland.getWorldUuid(dimension);
+            if (dimension.isUnlocked(homeland) && uuid != null) current.add(uuid);
+        }
         byWorldUuid.entrySet().removeIf(entry -> entry.getValue().equals(homeland.getId())
-                && !entry.getKey().equals(homeland.getWorldUuid()));
-        if (homeland.getWorldUuid() != null) {
-            byWorldUuid.put(homeland.getWorldUuid(), homeland.getId());
+                && !current.contains(entry.getKey()));
+        for (UUID uuid : current) {
+            byWorldUuid.put(uuid, homeland.getId());
         }
     }
 

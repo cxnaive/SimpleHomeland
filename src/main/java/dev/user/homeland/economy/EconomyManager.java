@@ -18,12 +18,17 @@ public class EconomyManager {
     }
 
     public void init() {
+        if (!plugin.getServer().getPluginManager().isPluginEnabled("XConomy")) {
+            plugin.getLogger().severe("XConomy 未启用，无法初始化经济系统");
+            enabled = false;
+            return;
+        }
         try {
             xconomyAPI = new XConomyAPI();
             enabled = true;
             plugin.getLogger().info("已连接到 XConomy 经济系统");
-        } catch (Exception e) {
-            plugin.getLogger().info("XConomy 未找到，经济功能不可用: " + e.getMessage());
+        } catch (Exception | LinkageError e) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "XConomy 经济系统初始化失败", e);
             enabled = false;
         }
     }

@@ -42,6 +42,7 @@ public class CrossServerManager {
     private RedisManager redisManager;
 
     public record PendingTeleport(UUID playerUuid, UUID ownerUuid, String homelandName,
+                                  @Nullable String targetWorldKey,
                                   boolean bypassAccess, @Nullable Location targetLocation,
                                   long createdAt) {}
 
@@ -51,6 +52,7 @@ public class CrossServerManager {
 
     public void init() {
         ConfigManager config = plugin.getConfigManager();
+        if (!plugin.getDatabaseManager().isMySQL()) return;
 
         if (config.isRedisChannel()) {
             redisManager = new RedisManager(plugin);
@@ -114,7 +116,7 @@ public class CrossServerManager {
         JsonArray worldsArray = new JsonArray();
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             org.bukkit.NamespacedKey nk = world.getKey();
-            if ("simplehomeland".equals(nk.getNamespace())) {
+            if ("homelands".equals(nk.getNamespace())) {
                 worldsArray.add(nk.getKey());
             }
         }
@@ -231,6 +233,7 @@ public class CrossServerManager {
             }
 
             PendingTeleport pt = new PendingTeleport(playerUuid, ownerUuid, homelandName,
+                    json.has("worldKey") ? json.get("worldKey").getAsString() : null,
                     bypassAccess, targetLocation, System.currentTimeMillis());
             plugin.getLogger().info("收到跨服传送请求: " + playerUuid + " -> " + homelandName);
 
@@ -249,18 +252,20 @@ public class CrossServerManager {
     private void handleLoadWorldRequest(String payload) {
         try {
             JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
-            Homeland homeland = null;
-
-            // 按优先级查找：worldUuid > worldKey > ownerUuid + homelandName
             if (json.has("worldUuid") && !json.get("worldUuid").isJsonNull()) {
-                UUID worldUuid = UUID.fromString(json.get("worldUuid").getAsString());
-                homeland = plugin.getHomelandManager().getHomelandByWorldUUID(worldUuid);
+                plugin.getHomelandManager().loadHomelandWorldByWorldUUIDAPI(
+                        UUID.fromString(json.get("worldUuid").getAsString()), result ->
+                                plugin.getLogger().info("跨服 UUID 加载结果: " + result));
+                return;
             }
-            if (homeland == null && json.has("worldKey") && !json.get("worldKey").isJsonNull()) {
-                String worldKey = json.get("worldKey").getAsString();
-                homeland = plugin.getHomelandManager().getHomelandByWorldKey(worldKey);
+            if (json.has("worldKey") && !json.get("worldKey").isJsonNull()) {
+                plugin.getHomelandManager().loadHomelandWorldByWorldKeyAPI(
+                        json.get("worldKey").getAsString(), result ->
+                                plugin.getLogger().info("跨服 key 加载结果: " + result));
+                return;
             }
-            if (homeland == null && json.has("ownerUuid") && !json.get("ownerUuid").isJsonNull()) {
+            Homeland homeland = null;
+            if (json.has("ownerUuid") && !json.get("ownerUuid").isJsonNull()) {
                 UUID ownerUuid = UUID.fromString(json.get("ownerUuid").getAsString());
                 String homelandName = json.get("homelandName").getAsString();
                 homeland = plugin.getHomelandManager().findHomeland(ownerUuid, homelandName).orElse(null);
@@ -308,14 +313,20 @@ public class CrossServerManager {
                 MessageUtil.send(player, plugin.getConfigManager().getMessage("homeland-not-found", "name", pt.homelandName()));
                 return;
             }
-            if (pt.bypassAccess()) {
-                plugin.getHomelandManager().addApiBypass(player.getUniqueId());
+            String targetKey = pt.targetWorldKey() == null ? h.getWorldKey()
+                    : dev.user.homeland.manager.HomelandWorldKeys.normalize(pt.targetWorldKey());
+            if (plugin.getHomelandManager().getHomelandByWorldKey(targetKey) != h) {
+                MessageUtil.send(player, plugin.getConfigManager().getMessage("world-not-loaded"));
+                return;
             }
-            if (pt.targetLocation() != null) {
-                plugin.getHomelandManager().loadHomelandWorldAndTeleport(player, h, pt.targetLocation(), pt.bypassAccess());
-            } else {
-                plugin.getHomelandManager().loadAndTeleportWithBypass(player, h, pt.bypassAccess());
-            }
+            plugin.getHomelandManager().teleportToHomelandByWorldKeyAPI(
+                    player, targetKey, pt.bypassAccess(), pt.targetLocation(), result -> {
+                        if (result == dev.user.homeland.api.TeleportResult.ACCESS_DENIED) {
+                            MessageUtil.sendAsync(player, plugin.getConfigManager().getMessage("world-access-denied"), plugin);
+                        } else if (result == dev.user.homeland.api.TeleportResult.WORLD_LOAD_FAILED) {
+                            MessageUtil.sendAsync(player, plugin.getConfigManager().getMessage("world-not-loaded"), plugin);
+                        }
+                    });
         }, () -> {}, 20L);
     }
 
@@ -352,6 +363,12 @@ public class CrossServerManager {
 
     public void requestTeleport(Player player, UUID ownerUuid, String homelandName,
                                 boolean bypassAccess, @Nullable Location targetLocation) {
+        requestTeleport(player, ownerUuid, homelandName, null, bypassAccess, targetLocation);
+    }
+
+    public void requestTeleport(Player player, UUID ownerUuid, String homelandName,
+                                @Nullable String worldKey, boolean bypassAccess,
+                                @Nullable Location targetLocation) {
         ConfigManager config = plugin.getConfigManager();
         MessageUtil.send(player, config.getMessage("branch-teleporting"));
 
@@ -360,6 +377,7 @@ public class CrossServerManager {
         payloadMap.put("playerUuid", player.getUniqueId().toString());
         payloadMap.put("ownerUuid", ownerUuid.toString());
         payloadMap.put("homelandName", homelandName);
+        if (worldKey != null) payloadMap.put("worldKey", worldKey);
         payloadMap.put("bypassAccess", bypassAccess);
         if (targetLocation != null) {
             Map<String, Object> locMap = new LinkedHashMap<>();
@@ -372,8 +390,7 @@ public class CrossServerManager {
         }
 
         if (redisManager != null) {
-            redisManager.sendTeleportRequest(player.getUniqueId(), ownerUuid, homelandName,
-                    bypassAccess, targetLocation);
+            redisManager.sendTeleportRequest(payloadMap);
             player.getScheduler().execute(plugin, () -> transferToMainServer(player), () -> {}, 1L);
         } else {
             String payload = gson.toJson(payloadMap);
@@ -546,10 +563,11 @@ public class CrossServerManager {
      * 主服务器调用：立即发布已加载世界列表（用于世界加载/卸载后即时更新）。
      */
     public void publishLoadedWorlds() {
+        if (!plugin.getDatabaseManager().isMySQL()) return;
         JsonArray worldsArray = new JsonArray();
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             org.bukkit.NamespacedKey nk = world.getKey();
-            if ("simplehomeland".equals(nk.getNamespace())) {
+            if ("homelands".equals(nk.getNamespace())) {
                 worldsArray.add(nk.getKey());
             }
         }

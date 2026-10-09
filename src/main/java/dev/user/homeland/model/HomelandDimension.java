@@ -51,6 +51,14 @@ public enum HomelandDimension {
         };
     }
 
+    public String uuidColumn() {
+        return switch (this) {
+            case OVERWORLD -> "world_uuid";
+            case NETHER -> "nether_uuid";
+            case END -> "end_uuid";
+        };
+    }
+
     public static HomelandDimension parse(String value) {
         return switch (value.toLowerCase(Locale.ROOT)) {
             case "overworld" -> OVERWORLD;

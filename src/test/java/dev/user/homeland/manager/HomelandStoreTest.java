@@ -1,6 +1,7 @@
 package dev.user.homeland.manager;
 
 import dev.user.homeland.model.Homeland;
+import dev.user.homeland.model.HomelandDimension;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -13,6 +14,30 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HomelandStoreTest {
+
+    @Test
+    void unloadedDimensionUuidsResolveToExactTargetAndLockedOrResetUuidsExpire() {
+        HomelandStore store = new HomelandStore();
+        UUID root = UUID.randomUUID();
+        UUID nether = UUID.randomUUID();
+        UUID end = UUID.randomUUID();
+        Homeland home = homeland(22, UUID.randomUUID(), "Home", "homeland_1234abcd_1", root);
+        home.setHasNether(true);
+        home.setHasEnd(true);
+        home.setWorldUuid(HomelandDimension.NETHER, nether);
+        home.setWorldUuid(HomelandDimension.END, end);
+        store.upsert(home);
+        assertEquals(home.getWorldKey() + "_nether", store.getWorldKeyByUuid(nether));
+        assertEquals(home.getWorldKey() + "_the_end", store.getWorldKeyByUuid(end));
+        store.updateWorldUuid(home, null);
+        assertNull(store.getWorldKeyByUuid(root));
+        assertEquals(home.getWorldKey() + "_nether", store.getWorldKeyByUuid(nether));
+        home.setHasNether(false);
+        store.refreshIndexes(home);
+        assertNull(store.getWorldKeyByUuid(nether));
+        store.remove(home);
+        assertNull(store.getWorldKeyByUuid(end));
+    }
 
     @Test
     void keepsOneCanonicalInstanceWithoutOverwritingLiveState() {

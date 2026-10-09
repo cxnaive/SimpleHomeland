@@ -63,6 +63,7 @@ public class ConfigManager {
     private String defaultDifficulty;
     private int autoUnloadSeconds;
     private boolean preloadWorlds;
+    private boolean migrateWorldsOnStartup;
 
     // 命令拦截配置
     private boolean commandBlockEnabled;
@@ -189,6 +190,7 @@ public class ConfigManager {
         }
         this.autoUnloadSeconds = config.getInt("homeland.auto-unload-seconds", 600);
         this.preloadWorlds = config.getBoolean("homeland.preload-worlds", false);
+        this.migrateWorldsOnStartup = config.getBoolean("homeland.migration-on-startup", false);
 
         // 命令拦截配置
         this.commandBlockEnabled = config.getBoolean("command-block.enabled", true);
@@ -349,6 +351,7 @@ public class ConfigManager {
     public String getDefaultDifficulty() { return defaultDifficulty; }
     public int getAutoUnloadSeconds() { return autoUnloadSeconds; }
     public boolean isPreloadWorlds() { return preloadWorlds; }
+    public boolean isMigrateWorldsOnStartup() { return migrateWorldsOnStartup; }
 
     public boolean isCommandBlockEnabled() { return commandBlockEnabled; }
     public List<String> getBlockedCommands() { return blockedCommands; }

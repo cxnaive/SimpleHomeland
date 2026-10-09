@@ -100,6 +100,9 @@ homeland:
   # 服务器启动时预加载所有家园世界（确保外部插件传送兼容）
   # 启用后所有家园世界常驻内存，auto-unload-seconds 无效
   preload-worlds: false
+  # 启动时一次性转换所有旧版家园世界；默认关闭，关闭时首次访问再按需转换
+  # 转换过程串行执行，完成后会卸载世界，旧 homelands 目录始终保留
+  migration-on-startup: false
 
 # 命令拦截
 command-block:

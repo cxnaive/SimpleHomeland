@@ -9,8 +9,22 @@ import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class DatabaseNameConstraintTest {
+
+    @Test
+    void recognizesExistingH2UniqueConstraintWhenTableIdentifierIsUppercase() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:unique-metadata")) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("CREATE TABLE homeland (name VARCHAR_IGNORECASE(32), owner_uuid VARCHAR(36), "
+                        + "CONSTRAINT homeland_name_unique UNIQUE(name))");
+                assertTrue(DatabaseManager.hasSingleColumnUniqueIndex(connection, "homeland", "name"));
+                assertFalse(DatabaseManager.hasSingleColumnUniqueIndex(connection, "homeland", "owner_uuid"));
+            }
+        }
+    }
 
     @Test
     void h2NameConstraintIsCaseInsensitiveAndIdempotent() throws Exception {

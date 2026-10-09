@@ -1,7 +1,7 @@
 name: SimpleHomeland
 version: ${version}
 main: dev.user.homeland.SimpleHomelandPlugin
-api-version: '1.21'
+api-version: '26.2'
 folia-supported: true
 
 libraries:
@@ -11,8 +11,8 @@ libraries:
   - com.google.code.gson:gson:2.12.1
   - redis.clients:jedis:5.1.3
 
-depend: [PlaceholderAPI]
-softdepend: [Worlds, XConomy, PlayerPoints, CraftEngine]
+depend: [PlaceholderAPI, XConomy]
+softdepend: [Worlds, PlayerPoints, CraftEngine]
 
 commands:
   homeland:

@@ -10,7 +10,7 @@
 - 支持三种地形：默认、空岛、超平坦
 - 世界重置（重新生成，可选新地形类型）
 - 地狱 / 末地维度解锁与自动加载
-- 细粒度访客权限系统（17 种权限开关）
+- 细粒度访客权限系统（18 种权限开关）
 - 公开 / 私有切换 + 玩家邀请机制
 - 阶梯式创建与扩展费用
 - 金币（XConomy）和点券（PlayerPoints）经济支持
@@ -29,16 +29,30 @@
 |------|------|------|
 | [Worlds](https://modrinth.com/plugin/worlds) | 必需 | 世界管理 API |
 | [PlaceholderAPI](https://modrinth.com/plugin/placeholderapi) | 必需 | 变量解析 |
-| [XConomy](https://modrinth.com/plugin/xconomy) | 可选 | 金币经济 |
+| [XConomy](https://modrinth.com/plugin/xconomy) | 必需 | 金币经济 |
 | [PlayerPoints](https://modrinth.com/plugin/playerpoints) | 可选 | 点券经济 |
 | [CraftEngine](https://github.com/Xiao-MoMi/craft-engine) | 可选 | 家具/自定义方块保护 |
 
 ## 安装
 
-1. 确保服务端为 Paper 1.21+ 或 Folia 1.21+
-2. 安装 Worlds 和 PlaceholderAPI
+1. 确保服务端为 Java 25、Paper 26.2+ 或 Folia 26.2+
+2. 安装 Worlds 4.4.1、PlaceholderAPI 2.12.3+ 和 XConomy
 3. 将 `SimpleHomeland-x.x.x.jar` 放入 `plugins/` 目录
 4. 启动服务器，编辑 `plugins/SimpleHomeland/config.yml` 配置
+
+### 从 Worlds 3 升级
+
+2.0.0 要求 Java 25、Paper/Folia 26.2 和 Worlds 4.4.1。升级前停服并备份数据库和世界目录，同时更新依赖插件。服务端要求和家园存储布局均有变化，因此本次升级使用大版本号。
+
+家园使用固定命名空间 `homelands`，目录为 `<主世界>/dimensions/homelands/<world_key>`。数据库里的 `world_key` 不变；首次加载旧家园时，插件复制旧 `homelands/<world_key>` 到迁移副本，再通过 Paper 官方迁移转换存档并校验 UUID。原目录保留为备份，不作为新版活动世界，也不参与孤儿世界扫描。迁移中断时会隔离未完成的副本并重试；已完成迁移后目录缺失会报错，不会从旧备份重新生成家园。
+
+默认仍是首次访问时按需转换。若希望启动时统一转换，在家园主服务器设置 `homeland.migration-on-startup: true` 并重启。插件启用、数据库索引加载完成后，会异步检查所有已登记家园的主世界和已解锁的地狱 / 末地；每次只转换一个维度，写入 UUID 后保存并卸载，再处理下一个。控制台会输出总数、逐个结果，并每 10 秒报告进度、当前世界和耗时；迁移期间暂停家园创建、世界操作和传送。已完成世界会跳过，转换失败会记录 key 并继续其他世界，卸载失败则停止批次以免积压内存。下次启动可重试未完成转换，或关闭选项继续按需转换。此选项与 `preload-worlds` 独立：后者启用时会在转换结束后再预加载主世界。配置重载不会启动全量转换，需重启。
+
+数据库自动新增 `nether_uuid`、`end_uuid` 两列，用于未加载维度的 UUID 查询。已有家园记录、邀请和设置保留。Bukkit 世界名称变为 `homelands_<world_key>`，家园显示名称不变；主世界、地狱和末地的 UUID 在迁移中保留。使用 UUID 的 HuskHomes home、warp、back 记录可继续定位原世界。仅依赖旧 Bukkit 世界名的其他插件需要检查各自的世界映射。
+
+对外传送 API 的方法签名、回调枚举保持兼容。按 UUID 或 key 调用时会保留目标维度和坐标，包含跨服请求；key 支持裸 `world_key`、`homelands:world_key`、旧 `simplehomeland:world_key` 和新版 Bukkit 世界名。传送回调在玩家所在的 region 线程执行。
+
+按需加载后，主世界、地狱、末地共用该家园的空闲计时；加载任意维度都会刷新计时，任意维度有玩家时保留整个家园。插件每 60 秒检查一次，达到 `auto-unload-seconds` 后保存并卸载已加载的维度。再次访问使用转换后的活动目录，原 UUID 和新修改都保留，旧备份不会被重新导入。启用 `preload-worlds` 时关闭自动卸载。
 
 ## 命令
 
@@ -152,6 +166,7 @@ homeland:
   default-difficulty: hard       # peaceful / easy / normal / hard
   auto-unload-seconds: 600       # 空闲自动卸载，0 禁用
   preload-worlds: false          # 启动时预加载所有世界（启用后常驻内存）
+  migration-on-startup: false    # 可选启动全量转换旧世界，默认仍按需转换
 
   # 阶梯式创建费用（超出列表取最后一档，设 0 免费）
   creation:
@@ -234,7 +249,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.cxnaive:SimpleHomeland:v1.9.1")
+    compileOnly("com.github.cxnaive:SimpleHomeland:v2.0.0")
 }
 ```
 
@@ -249,7 +264,7 @@ dependencies {
 <dependency>
     <groupId>com.github.cxnaive</groupId>
     <artifactId>SimpleHomeland</artifactId>
-    <version>v1.9.1</version>
+    <version>v2.0.0</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -302,7 +317,7 @@ SimpleHomelandAPI.teleportToHomelandByWorldUUID(player, worldUUID, false, result
 ./gradlew shadowJar
 ```
 
-输出：`build/libs/SimpleHomeland-1.9.1.jar`
+输出：`build/libs/SimpleHomeland-2.0.0.jar`
 
 ## 许可
 

@@ -88,9 +88,17 @@ public class HomelandProtectionListener implements Listener {
             Material.DAYLIGHT_DETECTOR, Material.CALIBRATED_SCULK_SENSOR
     );
 
-    /** 容器方块 */
+    /** 非标准库存方块；一般容器通过 BlockState implements InventoryHolder 自动识别。 */
     private static final Set<Material> CONTAINER_BLOCKS = EnumSet.of(
             Material.CHEST, Material.TRAPPED_CHEST, Material.BARREL,
+            Material.COPPER_CHEST, Material.EXPOSED_COPPER_CHEST,
+            Material.WEATHERED_COPPER_CHEST, Material.OXIDIZED_COPPER_CHEST,
+            Material.WAXED_COPPER_CHEST, Material.WAXED_EXPOSED_COPPER_CHEST,
+            Material.WAXED_WEATHERED_COPPER_CHEST, Material.WAXED_OXIDIZED_COPPER_CHEST,
+            Material.OAK_SHELF, Material.SPRUCE_SHELF, Material.BIRCH_SHELF,
+            Material.JUNGLE_SHELF, Material.ACACIA_SHELF, Material.DARK_OAK_SHELF,
+            Material.MANGROVE_SHELF, Material.CHERRY_SHELF, Material.BAMBOO_SHELF,
+            Material.CRIMSON_SHELF, Material.WARPED_SHELF, Material.PALE_OAK_SHELF,
             Material.FURNACE, Material.BLAST_FURNACE, Material.SMOKER,
             Material.HOPPER, Material.DROPPER, Material.DISPENSER,
             Material.SHULKER_BOX, Material.WHITE_SHULKER_BOX, Material.ORANGE_SHULKER_BOX,
@@ -199,7 +207,7 @@ public class HomelandProtectionListener implements Listener {
         }
 
         // 容器
-        if (CONTAINER_BLOCKS.contains(mat)) {
+        if (!ENCHANT_BLOCKS.contains(mat) && isContainerBlock(block)) {
             if (!plugin.getHomelandManager().checkVisitorFlag(player, worldKey, VisitorFlag.CONTAINER)) {
                 event.setCancelled(true);
                 sendDenied(player);
@@ -261,6 +269,11 @@ public class HomelandProtectionListener implements Listener {
             event.setCancelled(true);
             sendDenied(player);
         }
+    }
+
+    private boolean isContainerBlock(Block block) {
+        return CONTAINER_BLOCKS.contains(block.getType())
+                || block.getState() instanceof InventoryHolder;
     }
 
     // ==================== 物品事件 ====================
@@ -533,6 +546,20 @@ public class HomelandProtectionListener implements Listener {
                 event.setCancelled(true);
                 sendDenied(player);
             }
+            return;
+        }
+        // Only physical inventories are protected here; plugin menus may also use CHEST type.
+        org.bukkit.Location location = event.getInventory().getLocation();
+        if (location == null || location.getWorld() == null) return;
+        VisitorFlag flag;
+        if (type == InventoryType.ANVIL) flag = VisitorFlag.ANVIL;
+        else if (type == InventoryType.BREWING || type == InventoryType.ENCHANTING) flag = VisitorFlag.ENCHANT;
+        else if (holder != null) flag = VisitorFlag.CONTAINER;
+        else return;
+        if (!plugin.getHomelandManager().checkVisitorFlag(player,
+                location.getWorld().key().value(), flag)) {
+            event.setCancelled(true);
+            sendDenied(player);
         }
     }
 
