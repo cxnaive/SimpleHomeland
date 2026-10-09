@@ -93,7 +93,7 @@ public class DatabaseManager {
 
             String nameColumn = isMySQL
                     ? "name VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL"
-                    : "name VARCHAR(32) NOT NULL";
+                    : "name VARCHAR_IGNORECASE(32) NOT NULL";
 
             String homelandTable = "CREATE TABLE IF NOT EXISTS homeland (" +
                     idColumn + "," +
@@ -115,18 +115,37 @@ public class DatabaseManager {
             try {
                 stmt.execute("ALTER TABLE homeland ADD CONSTRAINT homeland_name_unique UNIQUE (name)");
                 plugin.getLogger().info("已添加 name 全局唯一约束");
-            } catch (SQLException e) {
+            } catch (SQLException alterError) {
+                boolean uniqueIndexExists;
                 try {
-                    if (hasSingleColumnUniqueIndex(conn, "homeland", "name")) {
-                        plugin.getLogger().fine("name 全局唯一约束已存在，跳过迁移");
-                    } else {
-                        plugin.getLogger().log(java.util.logging.Level.WARNING,
-                                "无法添加 name 全局唯一约束；请检查现有重复名称或数据库权限。", e);
-                    }
+                    uniqueIndexExists = hasSingleColumnUniqueIndex(conn, "homeland", "name");
                 } catch (SQLException metadataError) {
-                    e.addSuppressed(metadataError);
+                    alterError.addSuppressed(metadataError);
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                            "无法确认 name 全局唯一约束状态，停止数据库初始化。", alterError);
+                    throw alterError;
+                }
+                if (uniqueIndexExists) {
+                    plugin.getLogger().fine("name 全局唯一约束已存在，跳过迁移");
+                } else {
                     plugin.getLogger().log(java.util.logging.Level.WARNING,
-                            "无法确认 name 全局唯一约束状态，继续使用应用层名称检查。", e);
+                            "无法添加 name 全局唯一约束；请检查现有重复名称或数据库权限。", alterError);
+                    throw alterError;
+                }
+            }
+
+            // MySQL/MariaDB 的 utf8mb4_unicode_ci 已经按大小写不敏感处理名称。
+            // H2 旧表可能仍是 VARCHAR，迁移为 VARCHAR_IGNORECASE 以对齐应用层规则。
+            if (!isMySQL) {
+                try {
+                    if (!isH2NameCaseInsensitive(conn)) {
+                        stmt.execute("ALTER TABLE homeland ALTER COLUMN name "
+                                + "VARCHAR_IGNORECASE(32) NOT NULL");
+                    }
+                } catch (SQLException error) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                            "无法迁移 H2 name 大小写不敏感列，停止数据库初始化。", error);
+                    throw error;
                 }
             }
 
@@ -289,6 +308,19 @@ public class DatabaseManager {
         }
         return indexColumns.values().stream().anyMatch(columns -> columns.size() == 1
                 && columns.stream().anyMatch(column::equalsIgnoreCase));
+    }
+
+    private boolean isH2NameCaseInsensitive(Connection connection) throws SQLException {
+        try (ResultSet columns = connection.getMetaData().getColumns(
+                connection.getCatalog(), null, null, null)) {
+            while (columns.next()) {
+                if ("homeland".equalsIgnoreCase(columns.getString("TABLE_NAME"))
+                        && "name".equalsIgnoreCase(columns.getString("COLUMN_NAME"))) {
+                    return "VARCHAR_IGNORECASE".equalsIgnoreCase(columns.getString("TYPE_NAME"));
+                }
+            }
+        }
+        return false;
     }
 
     public Connection getConnection() throws SQLException {

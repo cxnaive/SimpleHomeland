@@ -629,8 +629,8 @@ public class HomelandCommand implements CommandExecutor, TabCompleter {
             }
 
             plugin.getHomelandManager().deleteHomelandAdmin(sender, targetUuid, homelandName,
-                    () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-success", "player", targetName, "name", homelandName)),
-                    () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-failed")));
+                    () -> {},
+                    () -> {});
         }, () -> sendMessage(sender, plugin.getConfigManager().getMessage("admin-delete-failed")));
         return true;
     }

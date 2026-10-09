@@ -64,6 +64,16 @@ class HomelandStoreTest {
     }
 
     @Test
+    void findsNamesGloballyWithoutCaseSensitivity() {
+        HomelandStore store = new HomelandStore();
+        Homeland homeland = homeland(6, UUID.randomUUID(), "firefly",
+                "homeland_firefly_1", UUID.randomUUID());
+        store.upsert(homeland);
+
+        assertSame(homeland, store.findByName("FIREFLY"));
+    }
+
+    @Test
     void rejectsIdentityCollisionForSameDatabaseId() {
         HomelandStore store = new HomelandStore();
         UUID owner = UUID.randomUUID();

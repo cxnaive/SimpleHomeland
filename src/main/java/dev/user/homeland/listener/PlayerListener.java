@@ -16,7 +16,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 public class PlayerListener implements Listener {
@@ -124,9 +123,8 @@ public class PlayerListener implements Listener {
             return;
         }
 
-        // 检查重名
-        Optional<Homeland> existing = plugin.getHomelandManager().getHomeland(uuid, input);
-        if (existing.isPresent()) {
+        // 家园名称全局唯一，输入阶段即拦截，避免进入地形选择后才失败。
+        if (plugin.getHomelandManager().findHomelandByName(input) != null) {
             MessageUtil.sendAsync(player, config.getMessage("homeland-name-exists", "name", input), plugin);
             return;
         }
@@ -156,9 +154,8 @@ public class PlayerListener implements Listener {
         UUID targetUuid = (UUID) state[0];
         String targetName = (String) state[1];
 
-        // 检查目标玩家重名
-        Optional<Homeland> existing = plugin.getHomelandManager().getHomeland(targetUuid, input);
-        if (existing.isPresent()) {
+        // 管理员代建同样按全局名称校验。
+        if (plugin.getHomelandManager().findHomelandByName(input) != null) {
             MessageUtil.sendAsync(admin, config.getMessage("homeland-name-exists", "name", input), plugin);
             return;
         }

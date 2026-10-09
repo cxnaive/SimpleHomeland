@@ -2190,6 +2190,11 @@ public class HomelandManager {
         loadHomelandWorldByKey(worldKey, world -> {
             if (world == null) return; // 加载失败，留大厅
             teleportToLocation(player, world, x, y, z, yaw, pitch);
+        }, error -> {
+            if (error instanceof HomelandOperationCoordinator.BusyException) {
+                sendAsyncMessage(player, plugin.getConfigManager().getMessage(
+                        "homeland-operation-busy"));
+            }
         });
     }
 

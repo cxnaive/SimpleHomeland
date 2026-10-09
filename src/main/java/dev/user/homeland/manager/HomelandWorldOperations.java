@@ -316,8 +316,10 @@ final class HomelandWorldOperations {
                     homeland.setOverworldResetPending(true);
                     homeland.setOverworldResetPreviousUuid(previousWorldUuid);
                     store.updateWorldUuid(homeland, null);
+                    // prepare 已持久化后，重置已经进入提交状态。后续失败只保留
+                    // pending 供恢复任务继续执行，不自动退款，避免恢复成功时免费重置。
                     return reportFailure(performOverworldReset(
-                                    target, homeland, worldTypeKey), target, cost,
+                                    target, homeland, worldTypeKey), target, ChargedCost.none(),
                             config.getMessage("reset-pending-recovery"), "重置主世界失败");
                 });
     }
